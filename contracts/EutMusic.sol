@@ -99,8 +99,8 @@ contract EutMusic is ERC721, Ownable {
         require(_exists(tokenId), "EutMusic: nonexistent token.");
         require(_tokenPrices[tokenId] != 0, "NFT not for sale.");
         require(msg.value >= _tokenPrices[tokenId], "Price not high enough.");
+        _tokenPrices[tokenId] = 0;
         _transfer(seller, buyer, tokenId);
         payable(seller).transfer(msg.value);
-        _tokenPrices[tokenId] = 0;
     }
 }
