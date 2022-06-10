@@ -16,6 +16,8 @@ contract BCEMusicMarket is ERC1155, Ownable, ReentrancyGuard {
 
     bytes private constant EMPTY_BYTES = "";
 
+    uint public constant OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET = 5;
+
     error InsufficientNFT(uint ownedAmount, uint requiredAmount);
     error InsufficientBalance(uint paid, uint price);
 
@@ -126,7 +128,8 @@ contract BCEMusicMarket is ERC1155, Ownable, ReentrancyGuard {
         require (theOffer.tokenId > 0, "Invalid order id.");
         require (theOffer.tokenId == DIAMOND_TOKEN_ID || theOffer.tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
 
-        if (msg.value < theOffer.totalPrice){
+        uint256 ownerFee = theOffer.totalPrice*OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET/100;
+        if (msg.value < theOffer.totalPrice+ownerFee){
             revert InsufficientBalance({
                 paid: msg.value,
                 price: theOffer.totalPrice
@@ -137,8 +140,9 @@ contract BCEMusicMarket is ERC1155, Ownable, ReentrancyGuard {
 
         _safeTransferFrom(theOfferCopy.seller, msg.sender, theOfferCopy.tokenId, theOfferCopy.amount, EMPTY_BYTES);
         payable(theOfferCopy.seller).transfer(theOfferCopy.totalPrice);
-        if (msg.value > theOfferCopy.totalPrice) {
-            payable(msg.sender).transfer(msg.value-theOfferCopy.totalPrice);
+        _contractOwner.transfer(ownerFee);
+        if (msg.value > theOfferCopy.totalPrice+ownerFee) {
+            payable(msg.sender).transfer(msg.value-theOfferCopy.totalPrice-ownerFee);
         }
         emit OfferFilled(offerId, theOfferCopy);
     }
@@ -148,6 +152,7 @@ contract BCEMusicMarket is ERC1155, Ownable, ReentrancyGuard {
         Offer storage theOffer = _offers[offerId]; 
         require (theOffer.tokenId > 0, "Invalid order id.");
         require (theOffer.tokenId == DIAMOND_TOKEN_ID || theOffer.tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
+        require (msg.sender == theOffer.seller, "Wrong seller");
 
         Offer memory theOfferCopy = _removeOffer(theOffer);
 
