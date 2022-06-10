@@ -8,46 +8,43 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 contract BCEMusicMarket is ERC1155, Ownable, ReentrancyGuard {
 
-    using Counters for Counters.Counter;
-    
-    Counters.Counter private _tokenIds;
-    Counters.Counter private _orderIds;
-
     uint public constant DIAMOND_TOKEN_AMOUNT = 1;
     uint public constant GOLDEN_TOKEN_AMOUNT = 499;
+
+    uint public constant DIAMOND_TOKEN_ID = 1;
+    uint public constant GOLDEN_TOKEN_ID = 2;
+
+    bytes private constant EMPTY_BYTES = "";
 
     error InsufficientNFT(uint ownedAmount, uint requiredAmount);
     error InsufficientBalance(uint paid, uint price);
 
     event RefundExtraPayment(uint paid, uint price, uint refund);
 
-    struct MarketOrder {
+    struct Offer {
         uint tokenId;
         uint amount;
-        uint price;
-        address payable seller;
-        address payable owner;
-        bool sold;
+        uint256 totalPrice;
+        address seller;
+        uint256 nextOffer; //this is a linked-list kind of structure
+        uint256 prevOffer;
     }
 
-    mapping (uint => MarketOrder) private idToMarketOrder;
-    // The two addresses can be different. operator is responsible for settling secondary market orders. 
-    address payable operator;
-    address payable contractOwner;
+    event OfferCreated(uint256 offerId, Offer offer);
+    event OfferFilled(uint256 offerId, Offer offer);
+    event OfferWithdrawn(uint256 offerId, Offer offer);
+
+    mapping (uint256 => Offer) private _offers;
+    uint256 private _firstOffer;
+    Counters.Counter private _offerIdCounter;
+    address payable _contractOwner;
 
     constructor(string memory uri) ERC1155(uri) {
-        contractOwner = payable(msg.sender);
-        operator = payable(msg.sender);
-    }
-
-    // Mint new NFT (by contract owner only). Diamond token and golden token use different (consecutive token IDs).
-    function mintNewToken() public onlyOwner {
-        uint tokenIdDiamond = _tokenIds.current(); // Current watermark
-        _tokenIds.increment();
-        _mint(msg.sender, tokenIdDiamond, DIAMOND_TOKEN_AMOUNT, "");
-        uint tokenIdGolden = _tokenIds.current();
-        _tokenIds.increment(); 
-        _mint(msg.sender, tokenIdGolden, GOLDEN_TOKEN_AMOUNT, ""); 
+        _firstOffer = 0;
+        Counters.reset(_offerIdCounter);
+        _contractOwner = payable(msg.sender);
+        _mint(msg.sender, DIAMOND_TOKEN_ID, DIAMOND_TOKEN_AMOUNT, EMPTY_BYTES);
+        _mint(msg.sender, GOLDEN_TOKEN_ID, GOLDEN_TOKEN_AMOUNT, EMPTY_BYTES);
     }
 
     function airDropInitialOwner(address receiver, uint tokenId, uint amount) public onlyOwner {
@@ -60,49 +57,98 @@ contract BCEMusicMarket is ERC1155, Ownable, ReentrancyGuard {
         safeTransferFrom(msg.sender, receiver, tokenId, amount, "");
     }
 
-    function createSecondaryMarketOrder(uint tokenId, uint amount, uint totalPrice) public nonReentrant {
-        require(tokenId < _tokenIds.current(), "Invalid token id.");
-        if (balanceOf(msg.sender, tokenId) < amount){
+    function offer(uint tokenId, uint amount, uint256 totalPrice) public {
+        require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
+        uint balance = balanceOf(msg.sender, tokenId);
+        if (balance < amount) {
             revert InsufficientNFT({
                     ownedAmount: balanceOf(msg.sender, tokenId), 
                     requiredAmount: amount
                 });
         }
-        uint orderId = _orderIds.current();
-        _orderIds.increment();
-        idToMarketOrder[orderId] = MarketOrder(
-            tokenId,
-            amount,
-            totalPrice,
-            payable(msg.sender),
-            operator,
-            false
+        uint256 outstandingOffers = 0;
+        uint256 lastOffer = 0;
+        if (_firstOffer != 0) {
+            uint256 currentId = _firstOffer;
+            while (currentId != 0) {
+                Offer storage currentOffer = _offers[currentId];
+                if (currentOffer.tokenId == tokenId && currentOffer.seller == msg.sender) {
+                    outstandingOffers += currentOffer.amount;
+                }
+                lastOffer = currentId;
+                currentId = currentOffer.nextOffer;
+            }
+        }
+        if (balance < amount+outstandingOffers) {
+            revert InsufficientNFT({
+                    ownedAmount: balanceOf(msg.sender, tokenId), 
+                    requiredAmount: amount
+                });
+        }
+
+        Counters.increment(_offerIdCounter);
+        uint256 offerId = Counters.current(_offerIdCounter);
+        _offers[offerId] = Offer(
+            tokenId, amount, totalPrice, msg.sender, 0, lastOffer
         );
-        _safeTransferFrom(msg.sender, operator, tokenId, amount, "");
+        if (_firstOffer == 0) {
+            _firstOffer = offerId;
+        }
+        if (lastOffer != 0) {
+            _offers[lastOffer].nextOffer = offerId;
+        }
+        emit OfferCreated(offerId, _offers[offerId]);
     }
 
-    function accpetSecondaryMarketOrder(uint orderId) public payable nonReentrant {
-        require (orderId < _orderIds.current(), "Invalid order id.");
-        // Not sure if variable order should be of memory type.
-        MarketOrder memory order = idToMarketOrder[orderId];
-        require(!order.sold, "This order has been sold.");
-        if (msg.value < order.price){
+    function _removeOffer(Offer storage theOffer) private returns (Offer memory) {
+        if (theOffer.prevOffer == 0) {
+            _firstOffer = theOffer.nextOffer;
+            if (theOffer.nextOffer != 0) {
+                _offers[theOffer.nextOffer].prevOffer = 0;
+            }
+        } else {
+            _offers[theOffer.prevOffer].nextOffer = theOffer.nextOffer;
+            if (theOffer.nextOffer != 0) {
+                _offers[theOffer.nextOffer].prevOffer = theOffer.prevOffer;
+            }
+        }
+        Offer memory theOfferCopy = theOffer;
+        theOffer.tokenId = 0;
+
+        return theOfferCopy;
+    }
+
+    function acceptOffer(uint256 offerId) public payable nonReentrant {
+        require (offerId > 0, "Invalid order id.");
+        Offer storage theOffer = _offers[offerId]; 
+        require (theOffer.tokenId > 0, "Invalid order id.");
+        require (theOffer.tokenId == DIAMOND_TOKEN_ID || theOffer.tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
+
+        if (msg.value < theOffer.totalPrice){
             revert InsufficientBalance({
                 paid: msg.value,
-                price: order.price
+                price: theOffer.totalPrice
             });
         }
-        order.seller.transfer(order.price);
-        if (msg.value > order.price) {
-            payable(msg.sender).transfer(msg.value - order.price);
-            emit RefundExtraPayment(
-                msg.value,
-                order.price,
-                msg.value - order.price
-            );
+
+        Offer memory theOfferCopy = _removeOffer(theOffer);
+
+        _safeTransferFrom(theOfferCopy.seller, msg.sender, theOfferCopy.tokenId, theOfferCopy.amount, EMPTY_BYTES);
+        payable(theOfferCopy.seller).transfer(theOfferCopy.totalPrice);
+        if (msg.value > theOfferCopy.totalPrice) {
+            payable(msg.sender).transfer(msg.value-theOfferCopy.totalPrice);
         }
-        _safeTransferFrom(operator, msg.sender, order.tokenId, order.amount, "");
-        idToMarketOrder[orderId].sold = true;
-        idToMarketOrder[orderId].owner = payable(msg.sender);
+        emit OfferFilled(offerId, theOfferCopy);
+    }
+
+    function withdrawOffer(uint256 offerId) public {
+        require (offerId > 0, "Invalid order id.");
+        Offer storage theOffer = _offers[offerId]; 
+        require (theOffer.tokenId > 0, "Invalid order id.");
+        require (theOffer.tokenId == DIAMOND_TOKEN_ID || theOffer.tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
+
+        Offer memory theOfferCopy = _removeOffer(theOffer);
+
+        emit OfferWithdrawn(offerId, theOfferCopy);
     }
 }
