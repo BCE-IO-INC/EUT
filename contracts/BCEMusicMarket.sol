@@ -59,6 +59,8 @@ contract BCEMusicMarket is ERC1155, Ownable, ReentrancyGuard {
 
     function offer(uint tokenId, uint amount, uint256 totalPrice) public {
         require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
+        require(amount > 0, "Invalid amount.");
+        require(totalPrice > 0, "Invalid price.");
         uint balance = balanceOf(msg.sender, tokenId);
         if (balance < amount) {
             revert InsufficientNFT({
