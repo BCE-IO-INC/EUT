@@ -1,13 +1,25 @@
 // SPDX-License-Identifier: MIT
 
-import "./EutLibrary.sol";
-import "./ERC721.sol";
-
 // EutMusic is authored by Eut.io
 // Holds who owns what
 // Contract.balance Holds CO's profit.
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity ^0.8.4;
+
+import "@openzeppelin/contracts/utils/Context.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+
+
 /**
  * @title EutMusic contract
  * @dev Extends ERC721 Non-Fungible Token Standard basic implementation
@@ -19,22 +31,29 @@ contract EutMusic is ERC721, Ownable {
     bool public marketIsActive = false;
     mapping (uint => uint) public _tokenPrices;
 
+    string private _baseURIStr;
+    uint256 private _nextTokenID;
+
     // Events
     event newTokenMinted (uint indexed _tokenId);
     event newOrderGenerated (uint indexed _tokenId, uint indexed price);
 
     constructor(string memory _name, uint256 saleStart) ERC721(_name, musicTokenSymbol) {
         flipMarketState();
+        _nextTokenID = saleStart;
     }
 
     // Withdraw all money in this account to the account owner. 
     function withdraw() public onlyOwner {
         uint balance = address(this).balance;
-        msg.sender.transfer(balance);
+        payable(msg.sender).transfer(balance);
     }
 
     function setBaseURI(string memory baseURI) public onlyOwner {
-        _setBaseURI(baseURI);
+        _baseURIStr = baseURI;
+    }
+    function _baseURI() internal view virtual override returns (string memory) {
+        return _baseURIStr;
     }
 
     function flipMarketState() public onlyOwner {
@@ -44,9 +63,10 @@ contract EutMusic is ERC721, Ownable {
     // Mint new NFT (by contract owner only).
     function mintNewToken() public onlyOwner payable {
         require(marketIsActive, "Market is not active yet.");
-        uint tokenId = totalSupply(); // Current watermark
+        uint tokenId = _nextTokenID; // Current watermark
         _safeMint(msg.sender, tokenId);
         _tokenPrices[tokenId] = 0; // Not for sale until otherwise.
+        ++_nextTokenID;
         emit newTokenMinted(tokenId);
     }
 
