@@ -5,8 +5,9 @@ import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./IBCEMusic.sol";
 
-contract BCEMusic is ERC1155, Ownable, ReentrancyGuard {
+contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
 
     uint public constant DIAMOND_TOKEN_AMOUNT = 1;
     uint public constant GOLDEN_TOKEN_AMOUNT = 499;
@@ -18,36 +19,18 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard {
 
     uint public constant OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET = 5;
 
-    error InsufficientNFT(uint ownedAmount, uint requiredAmount);
-    error InsufficientBalance(uint paid, uint price);
-
-    struct Offer {
-        uint tokenId;
-        uint amount;
-        uint256 totalPrice;
-        address seller;
-        uint256 nextOffer; //this is a linked-list kind of structure
-        uint256 prevOffer;
-    }
-
-    event OfferCreated(uint256 offerId, Offer offer);
-    event OfferFilled(uint256 offerId, Offer offer);
-    event OfferWithdrawn(uint256 offerId, Offer offer);
-
     mapping (uint256 => Offer) private _offers;
     uint256 private _firstOffer;
     Counters.Counter private _offerIdCounter;
-    address payable _contractOwner;
 
-    constructor(string memory uri) ERC1155(uri) {
+    constructor(string memory uri) ERC1155(uri) Ownable() ReentrancyGuard() {
         _firstOffer = 0;
         Counters.reset(_offerIdCounter);
-        _contractOwner = payable(msg.sender);
         _mint(msg.sender, DIAMOND_TOKEN_ID, DIAMOND_TOKEN_AMOUNT, EMPTY_BYTES);
         _mint(msg.sender, GOLDEN_TOKEN_ID, GOLDEN_TOKEN_AMOUNT, EMPTY_BYTES);
     }
 
-    function airDropInitialOwner(address receiver, uint tokenId, uint amount) public onlyOwner {
+    function airDropInitialOwner(address receiver, uint tokenId, uint amount) external override onlyOwner {
         if (balanceOf(msg.sender, tokenId) < amount){
             revert InsufficientNFT({
                     ownedAmount: balanceOf(msg.sender, tokenId), 
@@ -57,7 +40,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard {
         safeTransferFrom(msg.sender, receiver, tokenId, amount, "");
     }
 
-    function offer(uint tokenId, uint amount, uint256 totalPrice) public {
+    function offer(uint tokenId, uint amount, uint256 totalPrice) external override {
         require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
         require(amount > 0, "Invalid amount.");
         require(totalPrice > 0, "Invalid price.");
@@ -120,7 +103,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard {
         return theOfferCopy;
     }
 
-    function acceptOffer(uint256 offerId) public payable nonReentrant {
+    function acceptOffer(uint256 offerId) external payable override nonReentrant {
         require (offerId > 0, "Invalid order id.");
         Offer storage theOffer = _offers[offerId]; 
         require (theOffer.tokenId > 0, "Invalid order id.");
@@ -138,14 +121,14 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard {
 
         _safeTransferFrom(theOfferCopy.seller, msg.sender, theOfferCopy.tokenId, theOfferCopy.amount, EMPTY_BYTES);
         payable(theOfferCopy.seller).transfer(theOfferCopy.totalPrice);
-        _contractOwner.transfer(ownerFee);
+        payable(owner()).transfer(ownerFee);
         if (msg.value > theOfferCopy.totalPrice+ownerFee) {
             payable(msg.sender).transfer(msg.value-theOfferCopy.totalPrice-ownerFee);
         }
         emit OfferFilled(offerId, theOfferCopy);
     }
 
-    function withdrawOffer(uint256 offerId) public {
+    function withdrawOffer(uint256 offerId) external override {
         require (offerId > 0, "Invalid order id.");
         Offer storage theOffer = _offers[offerId]; 
         require (theOffer.tokenId > 0, "Invalid order id.");
