@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract BCEMusicMarket is ERC1155, Ownable, ReentrancyGuard {
+contract BCEMusic is ERC1155, Ownable, ReentrancyGuard {
 
     uint public constant DIAMOND_TOKEN_AMOUNT = 1;
     uint public constant GOLDEN_TOKEN_AMOUNT = 499;
