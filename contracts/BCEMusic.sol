@@ -21,8 +21,6 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard {
     error InsufficientNFT(uint ownedAmount, uint requiredAmount);
     error InsufficientBalance(uint paid, uint price);
 
-    event RefundExtraPayment(uint paid, uint price, uint refund);
-
     struct Offer {
         uint tokenId;
         uint amount;
