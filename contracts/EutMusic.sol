@@ -66,7 +66,9 @@ contract EutMusic is ERC721, Ownable {
         uint tokenId = _nextTokenID; // Current watermark
         _safeMint(msg.sender, tokenId);
         _tokenPrices[tokenId] = 0; // Not for sale until otherwise.
-        ++_nextTokenID;
+        unchecked {
+            ++_nextTokenID;
+        }
         emit newTokenMinted(tokenId);
     }
 
