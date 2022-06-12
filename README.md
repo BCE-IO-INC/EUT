@@ -1,8 +1,10 @@
 ## Euterpe
 
 EutMusic is authored by Eut.io
-pragma solidity on 0.6.0 <0.8.0;
+pragma solidity on ^0.8.4.
 contract EutMusic is ERC721, Ownable Extends ERC721 Non-Fungible Token Standard basic implementation
+
+BCEMusic is an ERC1155-based version.
  
  
 
