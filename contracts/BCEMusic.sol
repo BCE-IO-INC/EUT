@@ -58,7 +58,11 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             while (currentId != 0) {
                 Offer storage currentOffer = _offers[currentId];
                 if (currentOffer.tokenId == tokenId && currentOffer.seller == msg.sender) {
-                    outstandingOffers += currentOffer.amount;
+                    unchecked {
+                        //since the total outstanding offers can never exceed to fixed token supply
+                        //there cannot be overflow
+                        outstandingOffers += currentOffer.amount;
+                    }
                 }
                 lastOffer = currentId;
                 currentId = currentOffer.nextOffer;
@@ -123,7 +127,10 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         payable(theOfferCopy.seller).transfer(theOfferCopy.totalPrice);
         payable(owner()).transfer(ownerFee);
         if (msg.value > theOfferCopy.totalPrice+ownerFee) {
-            payable(msg.sender).transfer(msg.value-theOfferCopy.totalPrice-ownerFee);
+            unchecked {
+                //because of the condition, no need to check for underflow
+                payable(msg.sender).transfer(msg.value-theOfferCopy.totalPrice-ownerFee);
+            }
         }
         emit OfferFilled(offerId, theOfferCopy);
     }
