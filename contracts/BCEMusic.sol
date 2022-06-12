@@ -22,10 +22,12 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
     mapping (uint256 => Offer) private _offers;
     uint256 private _firstOffer;
     Counters.Counter private _offerIdCounter;
+    uint private _outstandingOfferCount;
 
     constructor(string memory uri) ERC1155(uri) Ownable() ReentrancyGuard() {
         _firstOffer = 0;
         Counters.reset(_offerIdCounter);
+        _outstandingOfferCount = 0;
         _mint(msg.sender, DIAMOND_TOKEN_ID, DIAMOND_TOKEN_AMOUNT, EMPTY_BYTES);
         _mint(msg.sender, GOLDEN_TOKEN_ID, GOLDEN_TOKEN_AMOUNT, EMPTY_BYTES);
     }
@@ -86,6 +88,9 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         if (lastOffer != 0) {
             _offers[lastOffer].nextOffer = offerId;
         }
+        unchecked {
+            ++_outstandingOfferCount;
+        }
         emit OfferCreated(offerId, _offers[offerId]);
     }
 
@@ -103,6 +108,9 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         }
         Offer memory theOfferCopy = theOffer;
         theOffer.tokenId = 0;
+        unchecked {
+            --_outstandingOfferCount;
+        }
 
         return theOfferCopy;
     }
@@ -145,5 +153,29 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         Offer memory theOfferCopy = _removeOffer(theOffer);
 
         emit OfferWithdrawn(offerId, theOfferCopy);
+    }
+
+    function getOutstandingOfferById(uint256 offerId) external view override returns (Offer memory) {
+        require (offerId > 0, "Invalid offer id.");
+        Offer memory theOffer = _offers[offerId];
+        require (theOffer.tokenId > 0, "Invalid order id.");
+        return theOffer;
+    }
+    function getAllOutstandingOffers() external view override returns (Offer[] memory) {
+        if (_outstandingOfferCount == 0) {
+            return new Offer[](0);
+        }
+        Offer[] memory theOffers = new Offer[](_outstandingOfferCount);
+        uint256 id = _firstOffer;
+        uint idx = 0;
+        while (id != 0 && idx < _outstandingOfferCount) {
+            Offer memory o = _offers[id];
+            theOffers[idx] = o;
+            unchecked {
+                ++idx;
+            }
+            id = o.nextOffer;
+        }
+        return theOffers;
     }
 }
