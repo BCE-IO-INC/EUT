@@ -114,8 +114,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         Offer storage theOffer = outstandingOffers.offers[offerId];   
         require (theOffer.terms.amount > 0, "Invalid offer.");     
 
-        uint256 ownerFee = theOffer.terms.totalPrice*OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET/100;
-        if (msg.value < theOffer.terms.totalPrice+ownerFee){
+        if (msg.value < theOffer.terms.totalPrice){
             revert InsufficientBalance({
                 paid: msg.value,
                 price: theOffer.terms.totalPrice
@@ -123,14 +122,15 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         }
 
         OfferTerms memory theOfferTermsCopy = _removeOffer(outstandingOffers, theOffer);
-
+        uint256 ownerFee = theOfferTermsCopy.totalPrice*OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET/100;
+        
         _safeTransferFrom(theOfferTermsCopy.seller, msg.sender, tokenId, theOfferTermsCopy.amount, EMPTY_BYTES);
-        payable(theOfferTermsCopy.seller).transfer(theOfferTermsCopy.totalPrice);
+        payable(theOfferTermsCopy.seller).transfer(theOfferTermsCopy.totalPrice-ownerFee);
         payable(owner()).transfer(ownerFee);
-        if (msg.value > theOfferTermsCopy.totalPrice+ownerFee) {
+        if (msg.value > theOfferTermsCopy.totalPrice) {
             unchecked {
                 //because of the condition, no need to check for underflow
-                payable(msg.sender).transfer(msg.value-theOfferTermsCopy.totalPrice-ownerFee);
+                payable(msg.sender).transfer(msg.value-theOfferTermsCopy.totalPrice);
             }
         }
         emit OfferFilled(tokenId, offerId, theOfferTermsCopy);
