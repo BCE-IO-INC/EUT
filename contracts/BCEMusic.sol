@@ -11,6 +11,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
 
     uint public constant DIAMOND_TOKEN_AMOUNT = 1;
     uint public constant GOLDEN_TOKEN_AMOUNT = 499;
+    uint public constant AMOUNT_UPPER_LIMIT = 500;
 
     uint public constant DIAMOND_TOKEN_ID = 1;
     uint public constant GOLDEN_TOKEN_ID = 2;
@@ -19,15 +20,9 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
 
     uint public constant OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET = 5;
 
-    mapping (uint256 => Offer) private _offers;
-    uint256 private _firstOffer;
-    Counters.Counter private _offerIdCounter;
-    uint private _outstandingOfferCount;
+    mapping (uint => OutstandingOffers) private _outstandingOffers;
 
     constructor(string memory uri) ERC1155(uri) Ownable() ReentrancyGuard() {
-        _firstOffer = 0;
-        Counters.reset(_offerIdCounter);
-        _outstandingOfferCount = 0;
         _mint(msg.sender, DIAMOND_TOKEN_ID, DIAMOND_TOKEN_AMOUNT, EMPTY_BYTES);
         _mint(msg.sender, GOLDEN_TOKEN_ID, GOLDEN_TOKEN_AMOUNT, EMPTY_BYTES);
     }
@@ -45,137 +40,140 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
     function offer(uint tokenId, uint amount, uint256 totalPrice) external override {
         require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
         require(amount > 0, "Invalid amount.");
+        require(amount < AMOUNT_UPPER_LIMIT, "Invalid amount.");
         require(totalPrice > 0, "Invalid price.");
-        uint balance = balanceOf(msg.sender, tokenId);
-        if (balance < amount) {
-            revert InsufficientNFT({
-                    ownedAmount: balanceOf(msg.sender, tokenId), 
-                    requiredAmount: amount
-                });
-        }
-        uint256 outstandingOffers = 0;
-        uint256 lastOffer = 0;
-        if (_firstOffer != 0) {
-            uint256 currentId = _firstOffer;
-            while (currentId != 0) {
-                Offer storage currentOffer = _offers[currentId];
-                if (currentOffer.tokenId == tokenId && currentOffer.seller == msg.sender) {
-                    unchecked {
-                        //since the total outstanding offers can never exceed to fixed token supply
-                        //there cannot be overflow
-                        outstandingOffers += currentOffer.amount;
-                    }
-                }
-                lastOffer = currentId;
-                currentId = currentOffer.nextOffer;
-            }
-        }
-        if (balance < amount+outstandingOffers) {
-            revert InsufficientNFT({
-                    ownedAmount: balanceOf(msg.sender, tokenId), 
-                    requiredAmount: amount
-                });
-        }
 
-        Counters.increment(_offerIdCounter);
-        uint256 offerId = Counters.current(_offerIdCounter);
-        _offers[offerId] = Offer(
-            tokenId, amount, totalPrice, msg.sender, 0, lastOffer
-        );
-        if (_firstOffer == 0) {
-            _firstOffer = offerId;
+        uint balance = balanceOf(msg.sender, tokenId);
+        OutstandingOffers storage offers = _outstandingOffers[tokenId];
+        uint requiredAmount = amount+offers.offerAmountBySeller[msg.sender];
+        if (balance < requiredAmount) {
+            revert InsufficientNFT({
+                    ownedAmount: balanceOf(msg.sender, tokenId), 
+                    requiredAmount: requiredAmount
+                });
         }
-        if (lastOffer != 0) {
-            _offers[lastOffer].nextOffer = offerId;
+        
+        Counters.increment(offers.offerIdCounter);
+        uint256 offerId = Counters.current(offers.offerIdCounter);
+        offers.offers[offerId] = Offer({
+            terms: OfferTerms({
+                seller: msg.sender 
+                , amount: amount
+                , totalPrice: totalPrice
+            })
+            , nextOffer: 0
+            , prevOffer: offers.lastOfferId
+        });
+        if (offers.firstOfferId != 0) {
+            offers.offers[offers.lastOfferId].nextOffer = offerId;
+        } else {
+            offers.firstOfferId = offerId;
         }
+        offers.lastOfferId = offerId;
         unchecked {
-            ++_outstandingOfferCount;
+            ++offers.totalCount;
+            offers.totalOfferAmount += amount;
+            offers.offerAmountBySeller[msg.sender] += amount;
         }
-        emit OfferCreated(offerId, _offers[offerId]);
+        emit OfferCreated(tokenId, offerId, offers.offers[offerId].terms);
     }
 
-    function _removeOffer(Offer storage theOffer) private returns (Offer memory) {
+    function _removeOffer(OutstandingOffers storage outstandingOffers, Offer storage theOffer) private returns (OfferTerms memory) {
         if (theOffer.prevOffer == 0) {
-            _firstOffer = theOffer.nextOffer;
+            outstandingOffers.firstOfferId = theOffer.nextOffer;
             if (theOffer.nextOffer != 0) {
-                _offers[theOffer.nextOffer].prevOffer = 0;
+                outstandingOffers.offers[theOffer.nextOffer].prevOffer = 0;
+            } else {
+                outstandingOffers.lastOfferId = 0;
             }
         } else {
-            _offers[theOffer.prevOffer].nextOffer = theOffer.nextOffer;
+            outstandingOffers.offers[theOffer.prevOffer].nextOffer = theOffer.nextOffer;
             if (theOffer.nextOffer != 0) {
-                _offers[theOffer.nextOffer].prevOffer = theOffer.prevOffer;
+                outstandingOffers.offers[theOffer.nextOffer].prevOffer = theOffer.prevOffer;
+            } else {
+                outstandingOffers.lastOfferId = theOffer.prevOffer;
             }
         }
-        Offer memory theOfferCopy = theOffer;
-        theOffer.tokenId = 0;
+        OfferTerms memory theOfferTermsCopy = theOffer.terms;
+        theOffer.terms.amount = 0;
+        
         unchecked {
-            --_outstandingOfferCount;
+            --outstandingOffers.totalCount;
+            outstandingOffers.totalOfferAmount -= theOfferTermsCopy.amount;
+            outstandingOffers.offerAmountBySeller[theOfferTermsCopy.seller] -= theOfferTermsCopy.amount;
         }
 
-        return theOfferCopy;
+        return theOfferTermsCopy;
     }
 
-    function acceptOffer(uint256 offerId) external payable override nonReentrant {
+    function acceptOffer(uint tokenId, uint256 offerId) external payable override nonReentrant {
+        require (tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
         require (offerId > 0, "Invalid order id.");
-        Offer storage theOffer = _offers[offerId]; 
-        require (theOffer.tokenId > 0, "Invalid order id.");
-        require (theOffer.tokenId == DIAMOND_TOKEN_ID || theOffer.tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
 
-        uint256 ownerFee = theOffer.totalPrice*OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET/100;
-        if (msg.value < theOffer.totalPrice+ownerFee){
+        OutstandingOffers storage outstandingOffers = _outstandingOffers[tokenId];
+        Offer storage theOffer = outstandingOffers.offers[offerId];   
+        require (theOffer.terms.amount > 0, "Invalid offer.");     
+
+        uint256 ownerFee = theOffer.terms.totalPrice*OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET/100;
+        if (msg.value < theOffer.terms.totalPrice+ownerFee){
             revert InsufficientBalance({
                 paid: msg.value,
-                price: theOffer.totalPrice
+                price: theOffer.terms.totalPrice
             });
         }
 
-        Offer memory theOfferCopy = _removeOffer(theOffer);
+        OfferTerms memory theOfferTermsCopy = _removeOffer(outstandingOffers, theOffer);
 
-        _safeTransferFrom(theOfferCopy.seller, msg.sender, theOfferCopy.tokenId, theOfferCopy.amount, EMPTY_BYTES);
-        payable(theOfferCopy.seller).transfer(theOfferCopy.totalPrice);
+        _safeTransferFrom(theOfferTermsCopy.seller, msg.sender, tokenId, theOfferTermsCopy.amount, EMPTY_BYTES);
+        payable(theOfferTermsCopy.seller).transfer(theOfferTermsCopy.totalPrice);
         payable(owner()).transfer(ownerFee);
-        if (msg.value > theOfferCopy.totalPrice+ownerFee) {
+        if (msg.value > theOfferTermsCopy.totalPrice+ownerFee) {
             unchecked {
                 //because of the condition, no need to check for underflow
-                payable(msg.sender).transfer(msg.value-theOfferCopy.totalPrice-ownerFee);
+                payable(msg.sender).transfer(msg.value-theOfferTermsCopy.totalPrice-ownerFee);
             }
         }
-        emit OfferFilled(offerId, theOfferCopy);
+        emit OfferFilled(tokenId, offerId, theOfferTermsCopy);
     }
 
-    function withdrawOffer(uint256 offerId) external override {
+    function withdrawOffer(uint tokenId, uint256 offerId) external override {
+        require (tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
         require (offerId > 0, "Invalid order id.");
-        Offer storage theOffer = _offers[offerId]; 
-        require (theOffer.tokenId > 0, "Invalid order id.");
-        require (theOffer.tokenId == DIAMOND_TOKEN_ID || theOffer.tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
-        require (msg.sender == theOffer.seller, "Wrong seller");
 
-        Offer memory theOfferCopy = _removeOffer(theOffer);
+        OutstandingOffers storage outstandingOffers = _outstandingOffers[tokenId];
+        Offer storage theOffer = outstandingOffers.offers[offerId]; 
+        require (theOffer.terms.amount > 0, "Invalid offer.");
+        require (msg.sender == theOffer.terms.seller, "Wrong seller");
 
-        emit OfferWithdrawn(offerId, theOfferCopy);
+        OfferTerms memory theOfferTermsCopy = _removeOffer(outstandingOffers, theOffer);
+
+        emit OfferWithdrawn(tokenId, offerId, theOfferTermsCopy);
     }
 
-    function getOutstandingOfferById(uint256 offerId) external view override returns (Offer memory) {
+    function getOutstandingOfferById(uint tokenId, uint256 offerId) external view override returns (OfferTerms memory) {
+        require (tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
         require (offerId > 0, "Invalid offer id.");
-        Offer memory theOffer = _offers[offerId];
-        require (theOffer.tokenId > 0, "Invalid order id.");
-        return theOffer;
+        OfferTerms memory theOfferTermsCopy = _outstandingOffers[tokenId].offers[offerId].terms;
+        return theOfferTermsCopy;
     }
-    function getAllOutstandingOffers() external view override returns (Offer[] memory) {
-        if (_outstandingOfferCount == 0) {
-            return new Offer[](0);
+    function getAllOutstandingOffersOnToken(uint tokenId) external view override returns (OfferTerms[] memory) {
+        require (tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
+
+        OutstandingOffers storage outstandingOffers = _outstandingOffers[tokenId];
+        if (outstandingOffers.totalCount == 0) {
+            return new OfferTerms[](0);
         }
-        Offer[] memory theOffers = new Offer[](_outstandingOfferCount);
-        uint256 id = _firstOffer;
-        uint idx = 0;
-        while (id != 0 && idx < _outstandingOfferCount) {
-            Offer memory o = _offers[id];
-            theOffers[idx] = o;
+        OfferTerms[] memory theOfferTerms = new OfferTerms[](outstandingOffers.totalCount);
+        uint256 id = outstandingOffers.firstOfferId;
+        uint outputIdx = 0;
+        while (id != 0 && outputIdx < theOfferTerms.length) {
+            Offer storage o = outstandingOffers.offers[id];
+            theOfferTerms[outputIdx] = o.terms;
             unchecked {
-                ++idx;
+                ++outputIdx;
             }
             id = o.nextOffer;
         }
-        return theOffers;
+        return theOfferTerms;
     }
 }

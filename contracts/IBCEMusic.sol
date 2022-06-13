@@ -1,29 +1,42 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
+import "@openzeppelin/contracts/utils/Counters.sol";
+
 interface IBCEMusic {
     error InsufficientNFT(uint ownedAmount, uint requiredAmount);
     error InsufficientBalance(uint paid, uint price);
 
-    struct Offer {
-        uint tokenId;
+    struct OfferTerms {
+        address seller;
         uint amount;
         uint256 totalPrice;
-        address seller;
+    }
+    struct Offer {
+        OfferTerms terms;
         uint256 nextOffer; //this is a linked-list kind of structure
         uint256 prevOffer;
     }
+    struct OutstandingOffers {
+        uint256 firstOfferId;
+        uint256 lastOfferId;
+        uint totalCount;
+        Counters.Counter offerIdCounter;
+        mapping (uint256 => Offer) offers;
+        uint totalOfferAmount;
+        mapping (address => uint) offerAmountBySeller;
+    }
 
-    event OfferCreated(uint256 offerId, Offer offer);
-    event OfferFilled(uint256 offerId, Offer offer);
-    event OfferWithdrawn(uint256 offerId, Offer offer);
+    event OfferCreated(uint tokenId, uint256 offerId, OfferTerms offerTerms);
+    event OfferFilled(uint tokenId, uint256 offerId, OfferTerms offerTerms);
+    event OfferWithdrawn(uint tokenId, uint256 offerId, OfferTerms offerTerms);
 
     function airDropInitialOwner(address receiver, uint tokenId, uint amount) external;
     function offer(uint tokenId, uint amount, uint256 totalPrice) external;
-    function acceptOffer(uint256 offerId) external payable;
-    function withdrawOffer(uint256 offerId) external;
-    function getOutstandingOfferById(uint256 offerId) external view returns (Offer memory);
-    function getAllOutstandingOffers() external view returns (Offer[] memory);
+    function acceptOffer(uint tokenId, uint256 offerId) external payable;
+    function withdrawOffer(uint tokenId, uint256 offerId) external;
+    function getOutstandingOfferById(uint tokenId, uint256 offerId) external view returns (OfferTerms memory);
+    function getAllOutstandingOffersOnToken(uint tokenId) external view returns (OfferTerms[] memory);
 
     struct Bid {
         address bidder;
