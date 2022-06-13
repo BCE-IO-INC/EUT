@@ -12,14 +12,17 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
     uint public constant DIAMOND_TOKEN_AMOUNT = 1;
     uint public constant GOLDEN_TOKEN_AMOUNT = 499;
     uint public constant AMOUNT_UPPER_LIMIT = 500;
+    uint public constant BID_LIMIT = 200; //avoid DDOS attacks where there are too many bids
 
     uint public constant DIAMOND_TOKEN_ID = 1;
     uint public constant GOLDEN_TOKEN_ID = 2;
 
     bytes private constant EMPTY_BYTES = "";
 
+    uint public constant OWNER_FEE_PERCENT_FOR_AUCTION = 10;
     uint public constant OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET = 5;
 
+    mapping (uint => OutstandingAuctions) private _outstandingAuctions;
     mapping (uint => OutstandingOffers) private _outstandingOffers;
 
     constructor(string memory uri) ERC1155(uri) Ownable() ReentrancyGuard() {
@@ -37,7 +40,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         safeTransferFrom(msg.sender, receiver, tokenId, amount, "");
     }
 
-    function offer(uint tokenId, uint amount, uint256 totalPrice) external override {
+    function offer(uint tokenId, uint amount, uint256 totalPrice) external override returns (uint256) {
         require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
         require(amount > 0, "Invalid amount.");
         require(amount < AMOUNT_UPPER_LIMIT, "Invalid amount.");
@@ -45,7 +48,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
 
         uint balance = balanceOf(msg.sender, tokenId);
         OutstandingOffers storage offers = _outstandingOffers[tokenId];
-        uint requiredAmount = amount+offers.offerAmountBySeller[msg.sender];
+        uint requiredAmount = amount+offers.offerAmountBySeller[msg.sender]+_outstandingAuctions[tokenId].auctionAmountBySeller[msg.sender];
         if (balance < requiredAmount) {
             revert InsufficientNFT({
                     ownedAmount: balanceOf(msg.sender, tokenId), 
@@ -76,6 +79,8 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             offers.offerAmountBySeller[msg.sender] += amount;
         }
         emit OfferCreated(tokenId, offerId, offers.offers[offerId].terms);
+
+        return offerId;
     }
 
     function _removeOffer(OutstandingOffers storage outstandingOffers, Offer storage theOffer) private returns (OfferTerms memory) {
@@ -175,5 +180,141 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             id = o.nextOffer;
         }
         return theOfferTerms;
+    }
+
+    function startAuction(uint tokenId, uint amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealPeriodSeconds) external override returns (uint256) {
+        require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
+        require(amount > 0, "Invalid amount.");
+        require(amount < AMOUNT_UPPER_LIMIT, "Invalid amount.");
+        require(reservePricePerUnit > 0, "Invalid reserve price.");
+
+        uint balance = balanceOf(msg.sender, tokenId);
+        OutstandingAuctions storage auctions = _outstandingAuctions[tokenId];
+        uint requiredAmount = amount+auctions.auctionAmountBySeller[msg.sender]+_outstandingOffers[tokenId].offerAmountBySeller[msg.sender];
+        if (balance < requiredAmount) {
+            revert InsufficientNFT({
+                    ownedAmount: balanceOf(msg.sender, tokenId), 
+                    requiredAmount: requiredAmount
+                });
+        }
+        
+        Counters.increment(auctions.auctionIdCounter);
+        uint256 auctionId = Counters.current(auctions.auctionIdCounter);
+        Auction storage auction = auctions.auctions[auctionId];
+        auction.terms = AuctionTerms({
+            seller: msg.sender 
+            , amount: amount
+            , reservePricePerUnit: reservePricePerUnit
+            , biddingDeadline: block.timestamp+biddingPeriodSeconds
+            , revealingDeadline: block.timestamp+biddingPeriodSeconds+revealPeriodSeconds
+        });
+        auction.prevAuction = auctions.lastAuctionId;
+        if (auctions.firstAuctionId != 0) {
+            auctions.auctions[auctions.lastAuctionId].nextAuction = auctionId;
+        } else {
+            auctions.firstAuctionId = auctionId;
+        }
+        auctions.lastAuctionId = auctionId;
+        unchecked {
+            ++auctions.totalCount;
+            auctions.totalAuctionAmount += amount;
+            auctions.auctionAmountBySeller[msg.sender] += amount;
+        }
+        emit AuctionCreated(tokenId, auctionId, auctions.auctions[auctionId].terms);
+
+        return auctionId;
+    }
+    //since bid does not send money anywhere, we don't mark it as nonReentrant
+    function bidOnAuction(uint tokenId, uint256 auctionId, uint amount, bytes32 bidHash) external payable override returns (uint256) {
+        require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
+        require(amount > 0, "Invalid amount.");
+
+        Auction storage auction = _outstandingAuctions[tokenId].auctions[auctionId];
+        require(auction.terms.amount > 0, "Invalid auction.");
+        require(amount <= auction.terms.amount, "Excessive amount.");
+        require(msg.value >= auction.terms.reservePricePerUnit*amount*2, "Insufficient earnest money");
+        require(block.timestamp <= auction.terms.biddingDeadline, "Bidding has closed.");
+        require(auction.bids.length < BID_LIMIT, "Too many bids.");
+
+        auction.bids.push(Bid({
+            bidder: msg.sender
+            , amount: amount
+            , earnestMoney: msg.value
+            , bidHash: bidHash
+            , revealed: false
+        }));
+        uint bidId = auction.bids.length-1;
+        auction.totalHeldBalance += msg.value;
+        
+        emit BidPlacedForAuction(tokenId, auctionId, bidId, auction.bids[bidId]);
+        return bidId;
+    }
+    function revealBidOnAuctionAndPayDifference(uint tokenId, uint256 auctionId, uint bidId, bytes32 nonce) external payable override {
+        require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
+
+        Auction storage auction = _outstandingAuctions[tokenId].auctions[auctionId];
+        require(auction.terms.amount > 0, "Invalid auction.");
+        require(bidId <= auction.bids.length, "Invalid bid id.");
+        require(block.timestamp <= auction.terms.revealingDeadline, "Revealing has closed.");
+        
+        Bid storage bid = auction.bids[bidId];
+        require(msg.sender == bid.bidder, "Not your bid.");
+        require(!bid.revealed, "Duplicate revealing");
+
+        uint256 totalPrice = msg.value+bid.earnestMoney;
+        bytes memory toHash = abi.encodePacked(totalPrice, nonce);
+        bytes32 theHash = keccak256(toHash);
+        require(theHash == bid.bidHash, "Hash does not match.");
+
+        auction.revealedBids.push(RevealedBid({
+            id: bidId 
+            , totalPrice: totalPrice
+        }));
+        bid.revealed = true;
+        auction.totalHeldBalance += msg.value;
+        
+        emit BidRevealedForAuction(tokenId, auctionId, bidId, auction.bids[bidId], auction.revealedBids[auction.revealedBids.length-1]);
+    }
+    function revealBidOnAuctionAndGetRefund(uint tokenId, uint256 auctionId, uint bidId, uint256 totalPrice, bytes32 nonce) external nonReentrant override {
+        require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
+
+        Auction storage auction = _outstandingAuctions[tokenId].auctions[auctionId];
+        require(auction.terms.amount > 0, "Invalid auction.");
+        require(bidId <= auction.bids.length, "Invalid bid id.");
+        require(block.timestamp <= auction.terms.revealingDeadline, "Revealing has closed.");
+        
+        Bid storage bid = auction.bids[bidId];
+        require(msg.sender == bid.bidder, "Not your bid.");
+        require(!bid.revealed, "Duplicate revealing");
+        require(totalPrice <= bid.earnestMoney, "Pay difference instead.");
+
+        bytes memory toHash = abi.encodePacked(totalPrice, nonce);
+        bytes32 theHash = keccak256(toHash);
+        require(theHash == bid.bidHash, "Hash does not match.");
+
+        uint256 refund;
+        unchecked {
+            refund = bid.earnestMoney-totalPrice;
+        }
+
+        auction.revealedBids.push(RevealedBid({
+            id: bidId 
+            , totalPrice: totalPrice
+        }));
+        bid.revealed = true;
+
+        if (refund > 0) {
+            auction.totalHeldBalance -= refund;
+            payable(msg.sender).transfer(refund);
+        }
+        
+        emit BidRevealedForAuction(tokenId, auctionId, bidId, auction.bids[bidId], auction.revealedBids[auction.revealedBids.length-1]);
+    }
+    function finalizeAuction(uint tokenId, uint256 auctionId) external override nonReentrant {
+        require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
+
+        Auction storage auction = _outstandingAuctions[tokenId].auctions[auctionId];
+        require(auction.terms.amount > 0, "Invalid auction.");
+        require(block.timestamp > auction.terms.revealingDeadline, "Immature finalizing");
     }
 }
