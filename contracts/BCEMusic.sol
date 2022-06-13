@@ -83,7 +83,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         return offerId;
     }
 
-    function _removeOffer(OutstandingOffers storage outstandingOffers, Offer storage theOffer) private returns (OfferTerms memory) {
+    function _removeOffer(OutstandingOffers storage outstandingOffers, uint256 offerId, Offer storage theOffer) private returns (OfferTerms memory) {
         if (theOffer.prevOffer == 0) {
             outstandingOffers.firstOfferId = theOffer.nextOffer;
             if (theOffer.nextOffer != 0) {
@@ -108,6 +108,8 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             outstandingOffers.offerAmountBySeller[theOfferTermsCopy.seller] -= theOfferTermsCopy.amount;
         }
 
+        delete(outstandingOffers.offers[offerId]);
+
         return theOfferTermsCopy;
     }
 
@@ -126,7 +128,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             });
         }
 
-        OfferTerms memory theOfferTermsCopy = _removeOffer(outstandingOffers, theOffer);
+        OfferTerms memory theOfferTermsCopy = _removeOffer(outstandingOffers, offerId, theOffer);
         uint256 ownerFee = theOfferTermsCopy.totalPrice*OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET/100;
         
         _safeTransferFrom(theOfferTermsCopy.seller, msg.sender, tokenId, theOfferTermsCopy.amount, EMPTY_BYTES);
@@ -150,7 +152,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         require (theOffer.terms.amount > 0, "Invalid offer.");
         require (msg.sender == theOffer.terms.seller, "Wrong seller");
 
-        OfferTerms memory theOfferTermsCopy = _removeOffer(outstandingOffers, theOffer);
+        OfferTerms memory theOfferTermsCopy = _removeOffer(outstandingOffers, offerId, theOffer);
 
         emit OfferWithdrawn(tokenId, offerId, theOfferTermsCopy);
     }
@@ -287,6 +289,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         require(msg.sender == bid.bidder, "Not your bid.");
         require(!bid.revealed, "Duplicate revealing");
         require(totalPrice <= bid.earnestMoney, "Pay difference instead.");
+        require(totalPrice >= auction.terms.reservePricePerUnit*bid.amount, "Not meeting reserve.");
 
         bytes memory toHash = abi.encodePacked(totalPrice, nonce);
         bytes32 theHash = keccak256(toHash);
@@ -310,11 +313,210 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         
         emit BidRevealedForAuction(tokenId, auctionId, bidId, auction.bids[bidId], auction.revealedBids[auction.revealedBids.length-1]);
     }
+
+    struct OneSend {
+        address receiver;
+        uint amount;
+        uint256 value;
+    }
+    function _buildFinalBids(Auction storage auction) private view returns (uint256[] memory) {
+        uint256[] memory finalBids = new uint256[](auction.revealedBids.length);
+        for (uint ii=0; ii<finalBids.length; ++ii) {
+            RevealedBid storage b = auction.revealedBids[ii];
+            finalBids[ii] = (b.totalPrice/auction.bids[b.id].amount)*1000+(200-ii);
+            uint jj = ii;
+            while (jj > 0) {
+                uint upper = (jj-1)/2;
+                if (finalBids[jj] > finalBids[upper]) {
+                    uint t = finalBids[upper];
+                    finalBids[upper] = finalBids[jj];
+                    finalBids[jj] = t;
+                }
+                jj = upper;
+            }
+        }
+        return finalBids;
+    }
+    function _buildPotentialWinners(Auction storage auction, uint256[] memory finalBids) private view returns (AuctionWinner[] memory) {
+        AuctionWinner[] memory potentialWinners = new AuctionWinner[](auction.revealedBids.length);
+        uint totalAmount = 0;
+        uint auctionAmount = auction.terms.amount;
+        bool breakNextTime = false;
+        for (uint ii=0; ii<potentialWinners.length; ++ii) {
+            RevealedBid storage r = auction.revealedBids[finalBids[200-((uint) (finalBids[0]%1000))]];
+            potentialWinners[ii] = AuctionWinner({
+                bidder : auction.bids[r.id].bidder 
+                , amount: auction.bids[r.id].amount
+                , pricePerUnit: finalBids[0]/1000
+                , actuallyPaid : r.totalPrice
+            });
+            if (breakNextTime) {
+                break;
+            }
+            totalAmount += auction.bids[r.id].amount;
+            if (totalAmount >= auctionAmount) {
+                breakNextTime = true;
+            }
+            finalBids[0] = finalBids[potentialWinners.length-1-ii];
+            uint jj=0;
+            while (true) {
+                uint left = jj*2+1;
+                uint right = left+1;
+                if (right < potentialWinners.length-1-ii) {
+                    if (finalBids[left] > finalBids[right]) {
+                        if (finalBids[jj] < finalBids[left]) {
+                            uint t = finalBids[jj];
+                            finalBids[jj] = finalBids[left];
+                            finalBids[left] = t;
+                            jj = left;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        if (finalBids[jj] < finalBids[right]) {
+                            uint t = finalBids[jj];
+                            finalBids[jj] = finalBids[right];
+                            finalBids[right] = t;
+                            jj = right;
+                        } else {
+                            break;
+                        }
+                    }
+                } else if (left < potentialWinners.length-1-ii) {
+                    if (finalBids[jj] < finalBids[left]) {
+                        uint t = finalBids[jj];
+                        finalBids[jj] = finalBids[left];
+                        finalBids[left] = t;
+                        jj = left;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+        return potentialWinners;
+    }
+    function _removeAuction(uint tokenId, uint256 auctionId, Auction storage auction) private {
+        OutstandingAuctions storage auctions = _outstandingAuctions[tokenId];
+        if (auction.prevAuction == 0) {
+            auctions.firstAuctionId = auction.nextAuction;
+            if (auction.nextAuction != 0) {
+                auctions.auctions[auction.nextAuction].prevAuction = 0;
+            } else {
+                auctions.lastAuctionId = 0;
+            }
+        } else {
+            auctions.auctions[auction.prevAuction].nextAuction = auction.nextAuction;
+            if (auction.nextAuction != 0) {
+                auctions.auctions[auction.nextAuction].prevAuction = auction.prevAuction;
+            } else {
+                auctions.lastAuctionId = auction.prevAuction;
+            }
+        }
+        
+        unchecked {
+            --auctions.totalCount;
+            auctions.totalAuctionAmount -= auction.terms.amount;
+            auctions.auctionAmountBySeller[auction.terms.seller] -= auction.terms.amount;
+        }
+
+        auction.terms.amount = 0;
+        delete(auctions.auctions[auctionId]);
+    }
     function finalizeAuction(uint tokenId, uint256 auctionId) external override nonReentrant {
         require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
 
         Auction storage auction = _outstandingAuctions[tokenId].auctions[auctionId];
         require(auction.terms.amount > 0, "Invalid auction.");
         require(block.timestamp > auction.terms.revealingDeadline, "Immature finalizing");
+
+        if (auction.revealedBids.length == 0) {
+            uint256 ownerFee = auction.totalHeldBalance*OWNER_FEE_PERCENT_FOR_AUCTION/100;
+            payable(owner()).transfer(ownerFee);
+            payable(auction.terms.seller).transfer(auction.totalHeldBalance-ownerFee);
+        } else {
+            uint256[] memory finalBids = _buildFinalBids(auction);
+            AuctionWinner[] memory potentialWinners = _buildPotentialWinners(auction, finalBids);
+            uint winnerCount = 0;
+            OneSend[] memory sends = new OneSend[](potentialWinners.length);
+            uint cumAmount = 0;
+            uint256 cumReceipt = 0;
+            for (uint ii=0; ii<potentialWinners.length; ++ii) {
+                if (ii+1 < potentialWinners.length) {
+                    potentialWinners[ii].pricePerUnit = potentialWinners[ii+1].pricePerUnit;
+                } else {
+                    potentialWinners[ii].pricePerUnit = auction.terms.reservePricePerUnit;
+                }
+                if (cumAmount + potentialWinners[ii].amount >= auction.terms.amount) {
+                    potentialWinners[ii].amount = auction.terms.amount-cumAmount;
+                }
+                cumReceipt += potentialWinners[ii].pricePerUnit*potentialWinners[ii].amount;
+                for (uint jj=0; jj<winnerCount; ++ii) {
+                    if (sends[jj].receiver == potentialWinners[ii].bidder) {
+                        sends[jj].amount += potentialWinners[ii].amount;
+                        sends[jj].value += potentialWinners[ii].actuallyPaid-potentialWinners[ii].pricePerUnit*potentialWinners[ii].amount;
+                        break;
+                    } else if (sends[jj].receiver == address(0)) {
+                        sends[jj].receiver = potentialWinners[ii].bidder;
+                        sends[jj].amount += potentialWinners[ii].amount;
+                        sends[jj].value += potentialWinners[ii].actuallyPaid-potentialWinners[ii].pricePerUnit*potentialWinners[ii].amount;
+                        break;
+                    }
+                }
+                cumAmount += potentialWinners[ii].amount;
+            }
+
+            for (uint ii=0; ii<sends.length; ++ii) {
+                if (sends[ii].receiver == address(0)) {
+                    break;
+                }
+                if (sends[ii].amount > 0) {
+                    _safeTransferFrom(auction.terms.seller, sends[ii].receiver, tokenId, sends[ii].amount, EMPTY_BYTES);
+                }
+            }
+
+            _removeAuction(tokenId, auctionId, auction);
+        
+            for (uint ii=0; ii<sends.length; ++ii) {
+                if (sends[ii].receiver == address(0)) {
+                    break;
+                }
+                if (sends[ii].value > 0) {
+                    payable(sends[ii].receiver).transfer(sends[ii].value);
+                }
+            }
+            uint256 ownerFee = cumReceipt*OWNER_FEE_PERCENT_FOR_AUCTION/100;
+            payable(owner()).transfer(ownerFee);
+            payable(auction.terms.seller).transfer(cumReceipt-ownerFee);
+        }
+    }
+
+    function getAuctionById(uint tokenId, uint256 auctionId) external view override returns (AuctionTerms memory) {
+        require (tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
+        require (auctionId > 0, "Invalid auction id.");
+        AuctionTerms memory theTermsCopy = _outstandingAuctions[tokenId].auctions[auctionId].terms;
+        return theTermsCopy;
+    }
+    function getAllAuctionsOnToken(uint tokenId) external view override returns (AuctionTerms[] memory) {
+        require (tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID, "Invalid token id.");
+
+        OutstandingAuctions storage outstandingAuctions = _outstandingAuctions[tokenId];
+        if (outstandingAuctions.totalCount == 0) {
+            return new AuctionTerms[](0);
+        }
+        AuctionTerms[] memory theTerms = new AuctionTerms[](outstandingAuctions.totalCount);
+        uint256 id = outstandingAuctions.firstAuctionId;
+        uint outputIdx = 0;
+        while (id != 0 && outputIdx < theTerms.length) {
+            Auction storage o = outstandingAuctions.auctions[id];
+            theTerms[outputIdx] = o.terms;
+            unchecked {
+                ++outputIdx;
+            }
+            id = o.nextAuction;
+        }
+        return theTerms;
     }
 }

@@ -67,7 +67,8 @@ interface IBCEMusic {
     struct AuctionWinner {
         address bidder;
         uint amount;
-        uint256 totalPayment;
+        uint256 pricePerUnit;
+        uint256 actuallyPaid;
     }
     struct OutstandingAuctions {
         uint256 firstAuctionId;
@@ -88,4 +89,7 @@ interface IBCEMusic {
     function revealBidOnAuctionAndPayDifference(uint tokenId, uint256 auctionId, uint bidId, bytes32 nonce) external payable;
     function revealBidOnAuctionAndGetRefund(uint tokenId, uint256 auctionId, uint bidId, uint256 totalPrice, bytes32 nonce) external;
     function finalizeAuction(uint tokenId, uint256 auctionId) external;
+
+    function getAuctionById(uint tokenId, uint256 auctionId) external view returns (AuctionTerms memory);
+    function getAllAuctionsOnToken(uint tokenId) external view returns (AuctionTerms[] memory);
 }
