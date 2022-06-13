@@ -398,7 +398,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         }
         return potentialWinners;
     }
-    function _removeAuction(uint tokenId, uint256 auctionId, Auction storage auction) private {
+    function _removeAuction(uint tokenId, uint256 auctionId, Auction storage auction) private returns (AuctionTerms memory) {
         OutstandingAuctions storage auctions = _outstandingAuctions[tokenId];
         if (auction.prevAuction == 0) {
             auctions.firstAuctionId = auction.nextAuction;
@@ -422,8 +422,10 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             auctions.auctionAmountBySeller[auction.terms.seller] -= auction.terms.amount;
         }
 
-        auction.terms.amount = 0;
+        AuctionTerms memory terms = auction.terms;
         delete(auctions.auctions[auctionId]);
+
+        return terms;
     }
     function finalizeAuction(uint tokenId, uint256 auctionId) external override nonReentrant {
         require((tokenId == DIAMOND_TOKEN_ID || tokenId == GOLDEN_TOKEN_ID), "Invalid token id.");
@@ -442,7 +444,6 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             uint winnerCount = 0;
             OneSend[] memory sends = new OneSend[](potentialWinners.length);
             uint cumAmount = 0;
-            uint256 cumReceipt = 0;
             for (uint ii=0; ii<potentialWinners.length; ++ii) {
                 if (ii+1 < potentialWinners.length) {
                     potentialWinners[ii].pricePerUnit = potentialWinners[ii+1].pricePerUnit;
@@ -452,7 +453,6 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
                 if (cumAmount + potentialWinners[ii].amount >= auction.terms.amount) {
                     potentialWinners[ii].amount = auction.terms.amount-cumAmount;
                 }
-                cumReceipt += potentialWinners[ii].pricePerUnit*potentialWinners[ii].amount;
                 for (uint jj=0; jj<winnerCount; ++ii) {
                     if (sends[jj].receiver == potentialWinners[ii].bidder) {
                         sends[jj].amount += potentialWinners[ii].amount;
@@ -477,19 +477,23 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
                 }
             }
 
-            _removeAuction(tokenId, auctionId, auction);
+            uint256 totalReceipt = auction.totalHeldBalance;
+            AuctionTerms memory terms = _removeAuction(tokenId, auctionId, auction);
         
             for (uint ii=0; ii<sends.length; ++ii) {
                 if (sends[ii].receiver == address(0)) {
                     break;
                 }
                 if (sends[ii].value > 0) {
+                    totalReceipt -= sends[ii].value;
                     payable(sends[ii].receiver).transfer(sends[ii].value);
                 }
             }
-            uint256 ownerFee = cumReceipt*OWNER_FEE_PERCENT_FOR_AUCTION/100;
+            uint256 ownerFee = totalReceipt*OWNER_FEE_PERCENT_FOR_AUCTION/100;
             payable(owner()).transfer(ownerFee);
-            payable(auction.terms.seller).transfer(cumReceipt-ownerFee);
+            payable(terms.seller).transfer(totalReceipt-ownerFee);
+
+            emit AuctionFinalized(tokenId, auctionId, terms, potentialWinners);
         }
     }
 
