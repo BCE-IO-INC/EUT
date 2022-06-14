@@ -6,28 +6,33 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./IBCEMusic.sol";
+import "./IBCEMusicSettings.sol";
 
 contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
 
     uint public constant DIAMOND_TOKEN_AMOUNT = 1;
     uint public constant GOLDEN_TOKEN_AMOUNT = 499;
     uint public constant AMOUNT_UPPER_LIMIT = 500;
-    uint public constant BID_LIMIT = 200; //avoid DDOS attacks where there are too many bids
 
     uint public constant DIAMOND_TOKEN_ID = 1;
     uint public constant GOLDEN_TOKEN_ID = 2;
 
     bytes private constant EMPTY_BYTES = "";
 
-    uint public constant OWNER_FEE_PERCENT_FOR_AUCTION = 10;
-    uint public constant OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET = 5;
+    address private _settingsAddr;
 
     mapping (uint => OutstandingAuctions) private _outstandingAuctions;
     mapping (uint => OutstandingOffers) private _outstandingOffers;
 
-    constructor(string memory uri) ERC1155(uri) Ownable() ReentrancyGuard() {
+    constructor(string memory uri, address settingsAddr) ERC1155(uri) Ownable() ReentrancyGuard() {
+        _settingsAddr = settingsAddr;
         _mint(msg.sender, DIAMOND_TOKEN_ID, DIAMOND_TOKEN_AMOUNT, EMPTY_BYTES);
         _mint(msg.sender, GOLDEN_TOKEN_ID, GOLDEN_TOKEN_AMOUNT, EMPTY_BYTES);
+    }
+
+    function switchSettings(address settingsAddr) external onlyOwner {
+        require(settingsAddr != address(0), "bad address.");
+        _settingsAddr = settingsAddr;
     }
 
     function airDropInitialOwner(address receiver, uint tokenId, uint amount) external override onlyOwner {
@@ -129,7 +134,8 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         }
 
         OfferTerms memory theOfferTermsCopy = _removeOffer(outstandingOffers, offerId, theOffer);
-        uint256 ownerFee = theOfferTermsCopy.totalPrice*OWNER_FEE_PERCENT_FOR_SECONDARY_MARKET/100;
+        uint ownerPct = IBCEMusicSettings(_settingsAddr).ownerFeePercentForSecondaryMarket();
+        uint256 ownerFee = theOfferTermsCopy.totalPrice*ownerPct/100;
         
         _safeTransferFrom(theOfferTermsCopy.seller, msg.sender, tokenId, theOfferTermsCopy.amount, EMPTY_BYTES);
         payable(theOfferTermsCopy.seller).transfer(theOfferTermsCopy.totalPrice-ownerFee);
@@ -236,7 +242,8 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         require(amount <= auction.terms.amount, "Excessive amount.");
         require(msg.value >= auction.terms.reservePricePerUnit*amount*2, "Insufficient earnest money");
         require(block.timestamp <= auction.terms.biddingDeadline, "Bidding has closed.");
-        require(auction.bids.length < BID_LIMIT, "Too many bids.");
+        uint bidLimit = IBCEMusicSettings(_settingsAddr).auctionBidLimit();
+        require(auction.bids.length < bidLimit, "Too many bids.");
 
         auction.bids.push(Bid({
             bidder: msg.sender
@@ -434,8 +441,9 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         require(auction.terms.amount > 0, "Invalid auction.");
         require(block.timestamp > auction.terms.revealingDeadline, "Immature finalizing");
 
+        uint ownerPct = IBCEMusicSettings(_settingsAddr).ownerFeePercentForAuction();
         if (auction.revealedBids.length == 0) {
-            uint256 ownerFee = auction.totalHeldBalance*OWNER_FEE_PERCENT_FOR_AUCTION/100;
+            uint256 ownerFee = auction.totalHeldBalance*ownerPct/100;
             payable(owner()).transfer(ownerFee);
             payable(auction.terms.seller).transfer(auction.totalHeldBalance-ownerFee);
         } else {
@@ -489,7 +497,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
                     payable(sends[ii].receiver).transfer(sends[ii].value);
                 }
             }
-            uint256 ownerFee = totalReceipt*OWNER_FEE_PERCENT_FOR_AUCTION/100;
+            uint256 ownerFee = totalReceipt*ownerPct/100;
             payable(owner()).transfer(ownerFee);
             payable(terms.seller).transfer(totalReceipt-ownerFee);
 
