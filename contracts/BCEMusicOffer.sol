@@ -73,7 +73,7 @@ library BCEMusicOffer {
         IBCEMusic.Offer storage theOffer = outstandingOffers.offers[offerId];   
         require (theOffer.terms.amount > 0, "Invalid offer.");     
 
-        require (value >= theOffer.terms.totalPrice, "BA");
+        require (value >= theOffer.terms.totalPrice, "Insufficient money.");
 
         return _removeOffer(outstandingOffers, offerId, theOffer);
     }
