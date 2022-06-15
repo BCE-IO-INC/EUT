@@ -7,9 +7,10 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 library BCEMusicAuction {
     uint public constant AMOUNT_UPPER_LIMIT = 500;
 
-    function startAuction(address seller, IBCEMusic.OutstandingAuctions storage auctions, uint amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint256) {
+    function startAuction(address seller, IBCEMusic.OutstandingAuctions storage auctions, uint amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds, uint bidCountLimit) external returns (uint256) {
         require(amount > 0 && amount < AMOUNT_UPPER_LIMIT, "Invalid amount.");
         require(reservePricePerUnit > 0, "Invalid reserve price.");
+        require(bidCountLimit > 0 && bidCountLimit <= 10000, "Invalid bid count limit.");
       
         Counters.increment(auctions.auctionIdCounter);
         uint256 auctionId = Counters.current(auctions.auctionIdCounter);
@@ -20,6 +21,7 @@ library BCEMusicAuction {
             , reservePricePerUnit: reservePricePerUnit
             , biddingDeadline: block.timestamp+biddingPeriodSeconds
             , revealingDeadline: block.timestamp+biddingPeriodSeconds+revealingPeriodSeconds
+            , bidCountLimit: bidCountLimit
         });
         auction.prevAuction = auctions.lastAuctionId;
         if (auctions.firstAuctionId != 0) {
@@ -36,12 +38,12 @@ library BCEMusicAuction {
 
         return auctionId;
     }
-    function bidOnAuction(address seller, uint256 value, uint bidLimit, IBCEMusic.Auction storage auction, uint amount, bytes32 bidHash) external returns (uint256) {
+    function bidOnAuction(address seller, uint256 value, IBCEMusic.Auction storage auction, uint amount, bytes32 bidHash) external returns (uint256) {
         require(auction.terms.amount > 0, "Invalid auction.");
         require(amount > 0 && amount <= auction.terms.amount, "Invalid amount.");
         require(value >= auction.terms.reservePricePerUnit*amount*2, "Insufficient earnest money");
         require(block.timestamp <= auction.terms.biddingDeadline, "Bidding has closed.");
-        require(auction.bids.length < bidLimit, "Too many bids.");
+        require(auction.bids.length < auction.terms.bidCountLimit, "Too many bids.");
 
         auction.bids.push(IBCEMusic.Bid({
             bidder: seller
@@ -94,7 +96,7 @@ library BCEMusicAuction {
         uint256[] memory finalBids = new uint256[](auction.revealedBids.length);
         for (uint ii=0; ii<finalBids.length; ++ii) {
             IBCEMusic.RevealedBid storage b = auction.revealedBids[ii];
-            finalBids[ii] = (b.totalPrice/auction.bids[b.id].amount)*1000+(200-ii);
+            finalBids[ii] = (b.totalPrice/auction.bids[b.id].amount)*10000+(9999-ii);
             uint jj = ii;
             while (jj > 0) {
                 uint upper = (jj-1)/2;
@@ -114,11 +116,12 @@ library BCEMusicAuction {
         uint auctionAmount = auction.terms.amount;
         bool breakNextTime = false;
         for (uint ii=0; ii<potentialWinners.length; ++ii) {
-            IBCEMusic.RevealedBid storage r = auction.revealedBids[finalBids[200-((uint) (finalBids[0]%1000))]];
+            IBCEMusic.RevealedBid storage r = auction.revealedBids[9999-((uint) (finalBids[0]%10000))];
             potentialWinners[ii] = IBCEMusic.AuctionWinner({
                 bidder : auction.bids[r.id].bidder 
+                , bidId : r.id
                 , amount: auction.bids[r.id].amount
-                , pricePerUnit: finalBids[0]/1000
+                , pricePerUnit: finalBids[0]/10000
                 , actuallyPaid : r.totalPrice
             });
             if (breakNextTime) {

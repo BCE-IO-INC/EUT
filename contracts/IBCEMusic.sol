@@ -52,6 +52,7 @@ interface IBCEMusic {
         uint256 reservePricePerUnit;
         uint256 biddingDeadline;
         uint256 revealingDeadline;
+        uint bidCountLimit;
     }
     struct Auction {
         AuctionTerms terms;
@@ -63,6 +64,7 @@ interface IBCEMusic {
     }
     struct AuctionWinner {
         address bidder;
+        uint bidId;
         uint amount;
         uint256 pricePerUnit;
         uint256 actuallyPaid;
@@ -81,7 +83,7 @@ interface IBCEMusic {
     event BidRevealedForAuction(uint tokenId, uint256 auctionId, uint256 bidId, Bid bid, RevealedBid revealedBid);
     event AuctionFinalized(uint tokenId, uint256 auctionId, AuctionTerms auctionTerms, AuctionWinner[] winners);
 
-    function startAuction(uint tokenId, uint amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint256);
+    function startAuction(uint tokenId, uint amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds, uint bidCountLimit) external returns (uint256);
     function bidOnAuction(uint tokenId, uint256 auctionId, uint amount, bytes32 bidHash) external payable returns (uint256);
     function revealBidOnAuction(uint tokenId, uint256 auctionId, uint bidId, uint256 totalPrice, bytes32 nonce) external payable;
     function finalizeAuction(uint tokenId, uint256 auctionId) external;
