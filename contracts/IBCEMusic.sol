@@ -57,6 +57,7 @@ interface IBCEMusic {
         AuctionTerms terms;
         Bid[] bids;
         RevealedBid[] revealedBids;
+        uint revealedAmount;
         uint256 nextAuction;
         uint256 prevAuction;
         uint256 totalHeldBalance;
