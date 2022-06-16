@@ -65,115 +65,83 @@ library BCEMusicAuction {
         }
         return false;
     }
-    function _compareBids2(IBCEMusic.Bid[] storage bids, IBCEMusic.RevealedBid storage a, uint256 pricePerUnit, uint id) private view returns (bool) {
-        uint256 aPrice = a.totalPrice/bids[a.id].amount;
-        if (aPrice < pricePerUnit) {
-            return true;
-        }
-        if (aPrice == pricePerUnit && a.id > id) {
-            return true;
-        }
-        return false;
-    }
     function _addRevealedBids(IBCEMusic.Bid[] storage bids, IBCEMusic.RevealedBid[] storage revealedBids, uint bidId, uint256 totalPrice) private {
         revealedBids.push(IBCEMusic.RevealedBid({
             id: bidId 
             , totalPrice: totalPrice
         }));
-        uint256 pricePerUnit = totalPrice/bids[bidId].amount;
-        uint idx = revealedBids.length-1;
-        while (idx > 1) {
-            uint parent = (idx-1)/2;
-            if (_compareBids2(bids, revealedBids[parent], pricePerUnit, bidId)) {
-                revealedBids[idx].id = revealedBids[parent].id;
-                revealedBids[idx].totalPrice = revealedBids[parent].totalPrice;
-                revealedBids[parent].id = bidId;
-                revealedBids[parent].totalPrice = totalPrice;
-                idx = parent;
+        if (revealedBids.length == 1) {
+            return;
+        } else {
+            //because we will need to maintain the revealedBids as a sorted array
+            //we use insertion sort here. (It might be tempting to maintain it as
+            //a heap only, but in order to prune the no-longer-in-play bids we have
+            //to make sure it is sorted, not just a heap.)
+            uint insertIdx = 0;
+            if (_compareBids(bids, revealedBids[0], revealedBids[revealedBids.length-1])) {
+                //insert idx is 0, do nothing
+            } else if (_compareBids(bids, revealedBids[revealedBids.length-1], revealedBids[revealedBids.length-2])) {
+                //no need to insert, just return
+                return;
             } else {
-                break;
+                uint low = 0;
+                uint high = revealedBids.length-2;
+                while (low+1 < high) {
+                    unchecked {
+                        uint mid = (low+high)/2; //because we keep pruning the revealed bids, there is no way this can overflow (unless we have an NFT of massive amounts -- which would not be the case)
+                        //Because each bid can only be revealed once and we use bid id as tiebreaker, there is no
+                        //way that two revealed bids can be equal. Also, since low+1<high, every time the interval always
+                        //goes down
+                        if (_compareBids(bids, revealedBids[mid], revealedBids[revealedBids.length-1])) {
+                            low = mid;
+                        } else {
+                            high = mid;
+                        }
+                    }
+                }
+                insertIdx = high;
             }
+            for (uint ii=revealedBids.length-1; ii>insertIdx; --ii) {
+                revealedBids[ii].totalPrice = revealedBids[ii-1].totalPrice;
+                revealedBids[ii].id = revealedBids[ii-1].id;
+            }
+            revealedBids[insertIdx].totalPrice = totalPrice;
+            revealedBids[insertIdx].id = bidId;
         }
     }
     struct OneRefund {
         address receiver;
         uint256 value;
     }
-    function _swap(IBCEMusic.RevealedBid storage a, IBCEMusic.RevealedBid storage b) private {
-        uint256 p = a.totalPrice;
-        uint id = a.id;
-        a.totalPrice = b.totalPrice;
-        a.id = b.id;
-        b.totalPrice = p;
-        b.id = id;
-    }
     function _rebuildRevealedBids(uint totalAmount, IBCEMusic.Bid[] storage bids, IBCEMusic.RevealedBid[] storage revealedBids) private returns (OneRefund[] memory) {
-        //the revealed bids must already be in a heap
         if (revealedBids.length == 0) {
             //always add one for possible revealer refund
             return new OneRefund[](1);
         }
         uint cumAmount = 0;
-        IBCEMusic.RevealedBid[] memory orderedBids = new IBCEMusic.RevealedBid[](revealedBids.length);
         uint ii = 0;
         bool breakNextTime = false;
         for (; ii<revealedBids.length; ++ii) {
-            orderedBids[ii] = revealedBids[0];
-            cumAmount += bids[revealedBids[0].id].amount;
-            revealedBids[0].id = revealedBids[revealedBids.length-1-ii].id;
-            revealedBids[0].totalPrice = revealedBids[revealedBids.length-1-ii].totalPrice;
-            uint jj=0;
-            while (true) {
-                uint left = jj*2+1;
-                uint right = left+1;
-                if (right < revealedBids.length-1-ii) {
-                    if (_compareBids(bids, revealedBids[left], revealedBids[right])) {
-                        if (_compareBids(bids, revealedBids[jj], revealedBids[right])) {
-                            _swap(revealedBids[jj], revealedBids[right]);
-                            jj = right;
-                        } else {
-                            break;
-                        }
-                    } else {
-                        if (_compareBids(bids, revealedBids[jj], revealedBids[left])) {
-                            _swap(revealedBids[jj], revealedBids[left]);
-                            jj = left;
-                        } else {
-                            break;
-                        }
-                    }
-                } else if (left < revealedBids.length-1-ii) {
-                    if (_compareBids(bids, revealedBids[jj], revealedBids[left])) {
-                        _swap(revealedBids[jj], revealedBids[left]);
-                        jj = left;
-                    } else {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
             if (breakNextTime) {
                 break;
-            } else {
-                if (cumAmount >= totalAmount) {
-                    breakNextTime = true;
-                }
+            } 
+            cumAmount += bids[revealedBids[ii].id].amount;
+            if (cumAmount >= totalAmount) {
+                breakNextTime = true;
             }
         }
-        if (ii < revealedBids.length) {
+        if (ii < revealedBids.length-1) {
+            uint ll = revealedBids.length-1-ii;
             //always add one for possible revealer refund
-            OneRefund[] memory ret = new OneRefund[](revealedBids.length-ii);
-            for (uint jj=0; jj<ret.length-1; ++jj) {
-                ret[jj].receiver = bids[revealedBids[jj].id].bidder;
-                ret[jj].value = revealedBids[jj].totalPrice;
+            OneRefund[] memory ret = new OneRefund[](ll+1);
+            for (uint jj=0; jj<ll; ++jj) {
+                ret[jj].receiver = bids[revealedBids[revealedBids.length-1].id].bidder;
+                ret[jj].value = revealedBids[revealedBids.length-1].totalPrice;
                 revealedBids.pop();
-            }
-            for (uint jj=0; jj<=ii; ++jj) {
-                revealedBids[jj] = orderedBids[jj];
             }
             return ret;
         } else {
+            //always add one for possible revealer refund
             return new OneRefund[](1);
         }
     }
