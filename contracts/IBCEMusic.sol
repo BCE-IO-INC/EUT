@@ -24,9 +24,9 @@ interface IBCEMusic {
         mapping (address => uint) offerAmountBySeller;
     }
 
-    event OfferCreated(uint tokenId, uint256 offerId, OfferTerms offerTerms);
-    event OfferFilled(uint tokenId, uint256 offerId, OfferTerms offerTerms);
-    event OfferWithdrawn(uint tokenId, uint256 offerId, OfferTerms offerTerms);
+    event OfferCreated(uint tokenId, uint256 offerId);
+    event OfferFilled(uint tokenId, uint256 offerId);
+    event OfferWithdrawn(uint tokenId, uint256 offerId);
 
     function airDropInitialOwner(address receiver, uint tokenId, uint amount) external;
     function offer(uint tokenId, uint amount, uint256 totalPrice) external returns (uint256);
@@ -52,7 +52,6 @@ interface IBCEMusic {
         uint256 reservePricePerUnit;
         uint256 biddingDeadline;
         uint256 revealingDeadline;
-        uint bidCountLimit;
     }
     struct Auction {
         AuctionTerms terms;
@@ -78,12 +77,12 @@ interface IBCEMusic {
         uint totalAuctionAmount;
         mapping (address => uint) auctionAmountBySeller;
     }
-    event AuctionCreated(uint tokenId, uint256 id, AuctionTerms auctionTerms);
-    event BidPlacedForAuction(uint tokenId, uint256 auctionId, uint256 bidId, Bid bid);
-    event BidRevealedForAuction(uint tokenId, uint256 auctionId, uint256 bidId, Bid bid, RevealedBid revealedBid);
-    event AuctionFinalized(uint tokenId, uint256 auctionId, AuctionTerms auctionTerms, AuctionWinner[] winners);
+    event AuctionCreated(uint tokenId, uint256 id);
+    event BidPlacedForAuction(uint tokenId, uint256 auctionId, uint256 bidId);
+    event BidRevealedForAuction(uint tokenId, uint256 auctionId, uint256 bidId);
+    event AuctionFinalized(uint tokenId, uint256 auctionId);
 
-    function startAuction(uint tokenId, uint amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds, uint bidCountLimit) external returns (uint256);
+    function startAuction(uint tokenId, uint amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint256);
     function bidOnAuction(uint tokenId, uint256 auctionId, uint amount, bytes32 bidHash) external payable returns (uint256);
     function revealBidOnAuction(uint tokenId, uint256 auctionId, uint bidId, uint256 totalPrice, bytes32 nonce) external payable;
     function finalizeAuction(uint tokenId, uint256 auctionId) external;

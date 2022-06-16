@@ -14,7 +14,11 @@
   "license": "ISC",
   "devDependencies": {
     "@openzeppelin/contracts": "^4.6.0",
-    "lite-server": "^2.3.0"
+    "@truffle/contract": "^4.5.14",
+    "ganache": "^7.3.0",
+    "lite-server": "^2.3.0",
+    "web3": "^1.7.3",
+    "web3-eth-contract": "^1.7.3"
   },
   "dependencies": {
     "@remix-project/remixd": "^0.6.1",
