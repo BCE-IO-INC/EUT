@@ -243,61 +243,17 @@ library BCEMusicAuction {
         uint amount;
         uint256 value;
     }
-    function _buildPotentialWinners(IBCEMusic.Auction storage auction) private returns (IBCEMusic.AuctionWinner[] memory) {
+    function _buildPotentialWinners(IBCEMusic.Auction storage auction) private view returns (IBCEMusic.AuctionWinner[] memory) {
         IBCEMusic.AuctionWinner[] memory potentialWinners = new IBCEMusic.AuctionWinner[](auction.revealedBids.length);
-        uint totalAmount = 0;
-        uint auctionAmount = auction.terms.amount;
-        bool breakNextTime = false;
         for (uint ii=0; ii<potentialWinners.length; ++ii) {
-            IBCEMusic.RevealedBid storage r = auction.revealedBids[0];
+            IBCEMusic.RevealedBid storage r = auction.revealedBids[ii];
             potentialWinners[ii] = IBCEMusic.AuctionWinner({
                 bidder : auction.bids[r.id].bidder 
                 , bidId : r.id
                 , amount: auction.bids[r.id].amount
-                , pricePerUnit: auction.revealedBids[0].totalPrice/auction.bids[auction.revealedBids[0].id].amount
+                , pricePerUnit: auction.revealedBids[ii].totalPrice/auction.bids[auction.revealedBids[ii].id].amount
                 , actuallyPaid : r.totalPrice
             });
-            totalAmount += auction.bids[r.id].amount;
-            auction.revealedBids[0].id = auction.revealedBids[potentialWinners.length-1-ii].id;
-            auction.revealedBids[0].totalPrice = auction.revealedBids[potentialWinners.length-1-ii].totalPrice;
-            uint jj=0;
-            while (true) {
-                uint left = jj*2+1;
-                uint right = left+1;
-                if (right < potentialWinners.length-1-ii) {
-                    if (_compareBids(auction.bids, auction.revealedBids[left], auction.revealedBids[right])) {
-                        if (_compareBids(auction.bids, auction.revealedBids[jj], auction.revealedBids[right])) {
-                            _swap(auction.revealedBids[jj], auction.revealedBids[right]);
-                            jj = right;
-                        } else {
-                            break;
-                        }
-                    } else {
-                        if (_compareBids(auction.bids, auction.revealedBids[jj], auction.revealedBids[left])) {
-                            _swap(auction.revealedBids[jj], auction.revealedBids[left]);
-                            jj = left;
-                        } else {
-                            break;
-                        }
-                    }
-                } else if (left < potentialWinners.length-1-ii) {
-                    if (_compareBids(auction.bids, auction.revealedBids[jj], auction.revealedBids[left])) {
-                        _swap(auction.revealedBids[jj], auction.revealedBids[left]);
-                        jj = left;
-                    } else {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-            if (breakNextTime) {
-                break;
-            } else {
-                if (totalAmount >= auctionAmount) {
-                    breakNextTime = true;
-                }
-            }
         }
         return potentialWinners;
     }

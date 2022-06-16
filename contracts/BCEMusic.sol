@@ -69,8 +69,12 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         uint256 ownerFee = theOfferTermsCopy.totalPrice*ownerPct/100;
         
         _safeTransferFrom(theOfferTermsCopy.seller, msg.sender, tokenId, theOfferTermsCopy.amount, EMPTY_BYTES);
-        payable(theOfferTermsCopy.seller).transfer(theOfferTermsCopy.totalPrice-ownerFee);
-        payable(owner()).transfer(ownerFee);
+        if (owner() != theOfferTermsCopy.seller) {
+            payable(theOfferTermsCopy.seller).transfer(theOfferTermsCopy.totalPrice-ownerFee);
+            payable(owner()).transfer(ownerFee);
+        } else {
+            payable(owner()).transfer(theOfferTermsCopy.totalPrice);
+        }
         if (msg.value > theOfferTermsCopy.totalPrice) {
             unchecked {
                 //because of the condition, no need to check for underflow
@@ -140,9 +144,13 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         uint ownerPct = IBCEMusicSettings(_settingsAddr).ownerFeePercentForAuction();
         
         if (auctionResult.winners.length == 0) {
-            uint256 ownerFee = auctionResult.totalReceipt*ownerPct/100;
-            payable(owner()).transfer(ownerFee);
-            payable(auctionResult.terms.seller).transfer(auctionResult.totalReceipt-ownerFee);
+            if (owner() != auctionResult.terms.seller) {
+                uint256 ownerFee = auctionResult.totalReceipt*ownerPct/100;
+                payable(owner()).transfer(ownerFee);
+                payable(auctionResult.terms.seller).transfer(auctionResult.totalReceipt-ownerFee);
+            } else {
+                payable(owner()).transfer(auctionResult.totalReceipt);
+            }
         } else {
             for (uint ii=0; ii<auctionResult.sends.length; ++ii) {
                 if (auctionResult.sends[ii].receiver == address(0)) {
@@ -164,9 +172,13 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
                     payable(auctionResult.sends[ii].receiver).transfer(auctionResult.sends[ii].value);
                 }
             }
-            uint256 ownerFee = totalReceipt*ownerPct/100;
-            payable(owner()).transfer(ownerFee);
-            payable(auctionResult.terms.seller).transfer(totalReceipt-ownerFee);
+            if (owner() != auctionResult.terms.seller) {
+                uint256 ownerFee = totalReceipt*ownerPct/100;
+                payable(owner()).transfer(ownerFee);
+                payable(auctionResult.terms.seller).transfer(totalReceipt-ownerFee);
+            } else {
+                payable(owner()).transfer(totalReceipt);
+            }
 
             emit AuctionFinalized(tokenId, auctionId);
         }
