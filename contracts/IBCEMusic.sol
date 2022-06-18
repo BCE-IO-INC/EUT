@@ -43,8 +43,9 @@ interface IBCEMusic {
         bool revealed;
     }
     struct RevealedBid {
-        uint256 id;
+        uint256 bidId;
         uint256 totalPrice;
+        uint nextRevealedBidId;
     }
     struct AuctionTerms {
         address seller;
@@ -56,7 +57,10 @@ interface IBCEMusic {
     struct Auction {
         AuctionTerms terms;
         Bid[] bids;
-        RevealedBid[] revealedBids;
+        mapping(uint => RevealedBid) revealedBids;
+        uint firstRevealedBidId;
+        Counters.Counter revealedBidIdCounter;
+        uint totalRevealedBidCount;
         uint revealedAmount;
         uint256 nextAuction;
         uint256 prevAuction;
@@ -90,4 +94,6 @@ interface IBCEMusic {
 
     function getAuctionById(uint tokenId, uint256 auctionId) external view returns (AuctionTerms memory);
     function getAllAuctionsOnToken(uint tokenId) external view returns (AuctionTerms[] memory);
+
+    function claimWithdrawal() external;
 }

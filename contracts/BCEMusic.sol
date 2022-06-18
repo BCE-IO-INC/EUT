@@ -24,6 +24,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
 
     mapping (uint => OutstandingAuctions) private _outstandingAuctions;
     mapping (uint => OutstandingOffers) private _outstandingOffers;
+    mapping (address => uint256) private _withdrawalAllowances;
 
     constructor(string memory uri, address settingsAddr) ERC1155(uri) Ownable() ReentrancyGuard() {
         _settingsAddr = settingsAddr;
@@ -58,7 +59,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         return offerId;
     }
 
-    function acceptOffer(uint tokenId, uint256 offerId) external payable override nonReentrant {
+    function acceptOffer(uint tokenId, uint256 offerId) external payable override {
         OfferTerms memory theOfferTermsCopy = BCEMusicOffer.acceptOffer(
             msg.value
             , _outstandingOffers[tokenId]
@@ -70,16 +71,13 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         
         _safeTransferFrom(theOfferTermsCopy.seller, msg.sender, tokenId, theOfferTermsCopy.amount, EMPTY_BYTES);
         if (owner() != theOfferTermsCopy.seller) {
-            payable(theOfferTermsCopy.seller).transfer(theOfferTermsCopy.totalPrice-ownerFee);
-            payable(owner()).transfer(ownerFee);
+            _withdrawalAllowances[theOfferTermsCopy.seller] += theOfferTermsCopy.totalPrice-ownerFee;
+            _withdrawalAllowances[owner()] += ownerFee;
         } else {
-            payable(owner()).transfer(theOfferTermsCopy.totalPrice);
+            _withdrawalAllowances[owner()] += theOfferTermsCopy.totalPrice;
         }
         if (msg.value > theOfferTermsCopy.totalPrice) {
-            unchecked {
-                //because of the condition, no need to check for underflow
-                payable(msg.sender).transfer(msg.value-theOfferTermsCopy.totalPrice);
-            }
+            _withdrawalAllowances[msg.sender] += msg.value-theOfferTermsCopy.totalPrice;
         }
         emit OfferFilled(tokenId, offerId);
     }
@@ -124,60 +122,53 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         emit BidPlacedForAuction(tokenId, auctionId, bidId);
         return bidId;
     }
-    function revealBidOnAuction(uint tokenId, uint256 auctionId, uint bidId, uint256 totalPrice, bytes32 nonce) external payable nonReentrant override {
+    function revealBidOnAuction(uint tokenId, uint256 auctionId, uint bidId, uint256 totalPrice, bytes32 nonce) external payable override {
         Auction storage auction = _outstandingAuctions[tokenId].auctions[auctionId];
-        BCEMusicAuction.OneRefund[] memory refunds = BCEMusicAuction.revealBidOnAuction(
+        BCEMusicAuction.revealBidOnAuction(
             msg.sender
             , msg.value
             , auction
             , bidId
             , totalPrice
             , nonce
+            , _withdrawalAllowances
         );
-        for (uint ii=0; ii<refunds.length; ++ii) {
-            payable(refunds[ii].receiver).transfer(refunds[ii].value);
-        }
         emit BidRevealedForAuction(tokenId, auctionId, bidId);
     }
-    function finalizeAuction(uint tokenId, uint256 auctionId) external override nonReentrant {
+    function finalizeAuction(uint tokenId, uint256 auctionId) external override {
         BCEMusicAuction.AuctionResult memory auctionResult = BCEMusicAuction.finalizeAuction(_outstandingAuctions[tokenId], auctionId);
         uint ownerPct = IBCEMusicSettings(_settingsAddr).ownerFeePercentForAuction();
         
         if (auctionResult.winners.length == 0) {
             if (owner() != auctionResult.terms.seller) {
                 uint256 ownerFee = auctionResult.totalReceipt*ownerPct/100;
-                payable(owner()).transfer(ownerFee);
-                payable(auctionResult.terms.seller).transfer(auctionResult.totalReceipt-ownerFee);
+                _withdrawalAllowances[owner()] += ownerFee;
+                _withdrawalAllowances[auctionResult.terms.seller] += auctionResult.totalReceipt-ownerFee;
             } else {
-                payable(owner()).transfer(auctionResult.totalReceipt);
+                _withdrawalAllowances[owner()] += auctionResult.totalReceipt;
             }
         } else {
-            for (uint ii=0; ii<auctionResult.sends.length; ++ii) {
-                if (auctionResult.sends[ii].receiver == address(0)) {
-                    break;
-                }
-                if (auctionResult.sends[ii].amount > 0) {
-                    _safeTransferFrom(auctionResult.terms.seller, auctionResult.sends[ii].receiver, tokenId, auctionResult.sends[ii].amount, EMPTY_BYTES);
-                }
-            }
-
             uint256 totalReceipt = auctionResult.totalReceipt;
-        
             for (uint ii=0; ii<auctionResult.sends.length; ++ii) {
                 if (auctionResult.sends[ii].receiver == address(0)) {
                     break;
                 }
-                if (auctionResult.sends[ii].value > 0) {
-                    totalReceipt -= auctionResult.sends[ii].value;
-                    payable(auctionResult.sends[ii].receiver).transfer(auctionResult.sends[ii].value);
+                uint amt = auctionResult.sends[ii].amount;
+                if (amt > 0) {
+                    _safeTransferFrom(auctionResult.terms.seller, auctionResult.sends[ii].receiver, tokenId, amt, EMPTY_BYTES);
+                }
+                uint256 val = auctionResult.sends[ii].value;
+                if (val > 0) {
+                    totalReceipt -= val;
+                    _withdrawalAllowances[auctionResult.sends[ii].receiver] += val;
                 }
             }
             if (owner() != auctionResult.terms.seller) {
                 uint256 ownerFee = totalReceipt*ownerPct/100;
-                payable(owner()).transfer(ownerFee);
-                payable(auctionResult.terms.seller).transfer(totalReceipt-ownerFee);
+                _withdrawalAllowances[owner()] += ownerFee;
+                _withdrawalAllowances[auctionResult.terms.seller] += totalReceipt-ownerFee;
             } else {
-                payable(owner()).transfer(totalReceipt);
+                _withdrawalAllowances[owner()] += totalReceipt;
             }
 
             emit AuctionFinalized(tokenId, auctionId);
@@ -189,5 +180,13 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
     }
     function getAllAuctionsOnToken(uint tokenId) external view override returns (AuctionTerms[] memory) {
         return BCEMusicAuction.getAllAuctions(_outstandingAuctions[tokenId]);
+    }
+
+    function claimWithdrawal() external override nonReentrant {
+        uint256 fund = _withdrawalAllowances[msg.sender];
+        if (fund > 0) {
+            _withdrawalAllowances[msg.sender] = 0;
+            payable(msg.sender).transfer(fund);
+        }
     }
 }
