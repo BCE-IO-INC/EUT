@@ -4,36 +4,42 @@ pragma solidity ^0.8.4;
 import "@openzeppelin/contracts/utils/Counters.sol";
 
 interface IBCEMusic {
+    //offer is a firm offer on one or more tokens of the same type
     struct OfferTerms {
-        address seller;
-        uint amount;
-        uint256 totalPrice;
+        uint16 amount; //since we hard-code each token type to at most 500 copies, uint16 is enough
+        uint256 totalPrice; 
+        address seller;  
     }
+    //We use double linked list because we may need to delete an offer
+    //from the list using only its id for lookup.
     struct Offer {
+        uint64 nextOffer; //this is a linked-list kind of structure
+        uint64 prevOffer; //uint64 would be enough for all the offer history
         OfferTerms terms;
-        uint256 nextOffer; //this is a linked-list kind of structure
-        uint256 prevOffer;
     }
     struct OutstandingOffers {
-        uint256 firstOfferId;
-        uint256 lastOfferId;
-        uint totalCount;
-        Counters.Counter offerIdCounter;
-        mapping (uint256 => Offer) offers;
-        uint totalOfferAmount;
-        mapping (address => uint) offerAmountBySeller;
+        uint16 totalOfferAmount;
+        uint48 totalCount;  //the first two sizes are designed to be packed together
+        uint64 firstOfferId;
+        uint64 lastOfferId;
+        uint64 offerIdCounter;
+        mapping (uint64 => Offer) offers;
+        mapping (address => uint16) offerAmountBySeller;
     }
 
-    event OfferCreated(uint tokenId, uint256 offerId);
-    event OfferFilled(uint tokenId, uint256 offerId);
-    event OfferWithdrawn(uint tokenId, uint256 offerId);
+    //In our current design, token id can only be 1 or 2, but it doesn't hurt to 
+    //use the full uint256 since ERC1155 gives us uint256 for token ID anyway
+    event OfferCreated(uint256 tokenId, uint64 offerId);
+    event OfferFilled(uint256 tokenId, uint64 offerId);
+    event OfferWithdrawn(uint256 tokenId, uint64 offerId);
 
-    function airDropInitialOwner(address receiver, uint tokenId, uint amount) external;
-    function offer(uint tokenId, uint amount, uint256 totalPrice) external returns (uint256);
-    function acceptOffer(uint tokenId, uint256 offerId) external payable;
-    function withdrawOffer(uint tokenId, uint256 offerId) external;
-    function getOutstandingOfferById(uint tokenId, uint256 offerId) external view returns (OfferTerms memory);
-    function getAllOutstandingOffersOnToken(uint tokenId) external view returns (OfferTerms[] memory);
+    function airDropInitialOwner(address receiver, uint256 tokenId, uint16 amount) external;
+    //the return value is offer ID
+    function offer(uint256 tokenId, uint16 amount, uint256 totalPrice) external returns (uint64);
+    function acceptOffer(uint256 tokenId, uint64 offerId) external payable;
+    function withdrawOffer(uint256 tokenId, uint64 offerId) external;
+    function getOutstandingOfferById(uint256 tokenId, uint64 offerId) external view returns (OfferTerms memory);
+    function getAllOutstandingOffersOnToken(uint256 tokenId) external view returns (OfferTerms[] memory);
 
     struct Bid {
         address bidder;

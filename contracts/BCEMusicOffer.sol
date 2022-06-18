@@ -2,25 +2,26 @@
 pragma solidity ^0.8.4;
 
 import "./IBCEMusic.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
 
 library BCEMusicOffer {
     uint public constant AMOUNT_UPPER_LIMIT = 500;
 
-    function offer(address seller, IBCEMusic.OutstandingOffers storage offers, uint amount, uint256 totalPrice) external returns (uint256) {
+    function offer(address seller, IBCEMusic.OutstandingOffers storage offers, uint16 amount, uint256 totalPrice) external returns (uint64) {
         require(amount > 0 && amount < AMOUNT_UPPER_LIMIT, "Invalid amount.");
         require(totalPrice > 0, "Invalid price.");
        
-        Counters.increment(offers.offerIdCounter);
-        uint256 offerId = Counters.current(offers.offerIdCounter);
+        //The logic simply inserts an offer into the double-linked list
+        //and then update the overall statistics fields.
+        ++offers.offerIdCounter;
+        uint64 offerId = offers.offerIdCounter;
         offers.offers[offerId] = IBCEMusic.Offer({
-            terms: IBCEMusic.OfferTerms({
-                seller: seller
-                , amount: amount
-                , totalPrice: totalPrice
-            })
-            , nextOffer: 0
+            nextOffer: 0
             , prevOffer: offers.lastOfferId
+            , terms: IBCEMusic.OfferTerms({
+                amount: amount
+                , totalPrice: totalPrice
+                , seller: seller
+            })
         });
         if (offers.firstOfferId != 0) {
             offers.offers[offers.lastOfferId].nextOffer = offerId;
@@ -37,7 +38,9 @@ library BCEMusicOffer {
         return offerId;
     }
 
-    function _removeOffer(IBCEMusic.OutstandingOffers storage outstandingOffers, uint256 offerId, IBCEMusic.Offer storage theOffer) private returns (IBCEMusic.OfferTerms memory) {
+    //This function removes an offer from the outstanding offers list
+    //, and then returns a copy of the original term. 
+    function _removeOffer(IBCEMusic.OutstandingOffers storage outstandingOffers, uint64 offerId, IBCEMusic.Offer storage theOffer) private returns (IBCEMusic.OfferTerms memory) {
         if (theOffer.prevOffer == 0) {
             outstandingOffers.firstOfferId = theOffer.nextOffer;
             if (theOffer.nextOffer != 0) {
@@ -67,7 +70,9 @@ library BCEMusicOffer {
         return theOfferTermsCopy;
     }
 
-    function acceptOffer(uint256 value, IBCEMusic.OutstandingOffers storage outstandingOffers, uint256 offerId) external returns (IBCEMusic.OfferTerms memory) {
+    //Because the actual transfers of the token happen outside of this
+    //library function call, acceptOffer looks quite like withdrawOffer.
+    function acceptOffer(uint256 value, IBCEMusic.OutstandingOffers storage outstandingOffers, uint64 offerId) external returns (IBCEMusic.OfferTerms memory) {
         require (offerId > 0, "Invalid order id.");
 
         IBCEMusic.Offer storage theOffer = outstandingOffers.offers[offerId];   
@@ -78,7 +83,7 @@ library BCEMusicOffer {
         return _removeOffer(outstandingOffers, offerId, theOffer);
     }
 
-    function withdrawOffer(address seller, IBCEMusic.OutstandingOffers storage outstandingOffers, uint256 offerId) external returns (IBCEMusic.OfferTerms memory) {
+    function withdrawOffer(address seller, IBCEMusic.OutstandingOffers storage outstandingOffers, uint64 offerId) external returns (IBCEMusic.OfferTerms memory) {
         require (offerId > 0, "Invalid order id.");
 
         IBCEMusic.Offer storage theOffer = outstandingOffers.offers[offerId]; 
@@ -88,7 +93,7 @@ library BCEMusicOffer {
         return _removeOffer(outstandingOffers, offerId, theOffer);
     }
 
-    function getOutstandingOfferById(IBCEMusic.OutstandingOffers storage outstandingOffers, uint256 offerId) external view returns (IBCEMusic.OfferTerms memory) {
+    function getOutstandingOfferById(IBCEMusic.OutstandingOffers storage outstandingOffers, uint64 offerId) external view returns (IBCEMusic.OfferTerms memory) {
         require (offerId > 0, "Invalid offer id.");
         IBCEMusic.OfferTerms memory theOfferTermsCopy = outstandingOffers.offers[offerId].terms;
         return theOfferTermsCopy;
@@ -98,7 +103,7 @@ library BCEMusicOffer {
             return new IBCEMusic.OfferTerms[](0);
         }
         IBCEMusic.OfferTerms[] memory theOfferTerms = new IBCEMusic.OfferTerms[](outstandingOffers.totalCount);
-        uint256 id = outstandingOffers.firstOfferId;
+        uint64 id = outstandingOffers.firstOfferId;
         uint outputIdx = 0;
         while (id != 0 && outputIdx < theOfferTerms.length) {
             IBCEMusic.Offer storage o = outstandingOffers.offers[id];

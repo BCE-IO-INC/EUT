@@ -23,8 +23,8 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
 
     address private _settingsAddr;
 
-    mapping (uint => OutstandingAuctions) private _outstandingAuctions;
-    mapping (uint => OutstandingOffers) private _outstandingOffers;
+    mapping (uint256 => OutstandingAuctions) private _outstandingAuctions;
+    mapping (uint256 => OutstandingOffers) private _outstandingOffers;
     mapping (address => uint256) private _withdrawalAllowances;
 
     constructor(string memory uri, address settingsAddr) ERC1155(uri) Ownable() ReentrancyGuard() {
@@ -38,18 +38,18 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         _settingsAddr = settingsAddr;
     }
 
-    function airDropInitialOwner(address receiver, uint tokenId, uint amount) external override onlyOwner {
+    function airDropInitialOwner(address receiver, uint256 tokenId, uint16 amount) external override onlyOwner {
         require (balanceOf(msg.sender, tokenId) >= amount, "AM");
         safeTransferFrom(msg.sender, receiver, tokenId, amount, EMPTY_BYTES);
     }
 
-    function offer(uint tokenId, uint amount, uint256 totalPrice) external override returns (uint256) {
+    function offer(uint256 tokenId, uint16 amount, uint256 totalPrice) external override returns (uint64) {
         uint balance = balanceOf(msg.sender, tokenId);
         OutstandingOffers storage offers = _outstandingOffers[tokenId];
         uint requiredAmount = amount+offers.offerAmountBySeller[msg.sender]+_outstandingAuctions[tokenId].auctionAmountBySeller[msg.sender];
         require (balance >= requiredAmount, "BA");
 
-        uint256 offerId = BCEMusicOffer.offer(
+        uint64 offerId = BCEMusicOffer.offer(
             msg.sender
             , offers
             , amount
@@ -60,16 +60,22 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         return offerId;
     }
 
-    function acceptOffer(uint tokenId, uint256 offerId) external payable override {
+    function acceptOffer(uint256 tokenId, uint64 offerId) external payable override {
         OfferTerms memory theOfferTermsCopy = BCEMusicOffer.acceptOffer(
             msg.value
             , _outstandingOffers[tokenId]
             , offerId
         );
         
+        //owner fee percentage is always resolved from contract call
+        //thus allowing easier adjustments
         uint ownerPct = IBCEMusicSettings(_settingsAddr).ownerFeePercentForSecondaryMarket();
         uint256 ownerFee = theOfferTermsCopy.totalPrice*ownerPct/100;
         
+        //The token transfer happens immediately, but the payment is not
+        //transferred automatically, they must be claimed later. 
+        //As payments are not transferred, there is no need to mark the whole
+        //function as non reentrant.
         _safeTransferFrom(theOfferTermsCopy.seller, msg.sender, tokenId, theOfferTermsCopy.amount, EMPTY_BYTES);
         if (owner() != theOfferTermsCopy.seller) {
             _withdrawalAllowances[theOfferTermsCopy.seller] += theOfferTermsCopy.totalPrice-ownerFee;
@@ -83,7 +89,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         emit OfferFilled(tokenId, offerId);
     }
 
-    function withdrawOffer(uint tokenId, uint256 offerId) external override {
+    function withdrawOffer(uint256 tokenId, uint64 offerId) external override {
         BCEMusicOffer.withdrawOffer(
             msg.sender
             , _outstandingOffers[tokenId]
@@ -92,10 +98,10 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         emit OfferWithdrawn(tokenId, offerId);
     }
 
-    function getOutstandingOfferById(uint tokenId, uint256 offerId) external view override returns (OfferTerms memory) {
+    function getOutstandingOfferById(uint256 tokenId, uint64 offerId) external view override returns (OfferTerms memory) {
         return BCEMusicOffer.getOutstandingOfferById(_outstandingOffers[tokenId], offerId);
     }
-    function getAllOutstandingOffersOnToken(uint tokenId) external view override returns (OfferTerms[] memory) {
+    function getAllOutstandingOffersOnToken(uint256 tokenId) external view override returns (OfferTerms[] memory) {
         return BCEMusicOffer.getAllOutstandingOffers(_outstandingOffers[tokenId]);
     }
 
