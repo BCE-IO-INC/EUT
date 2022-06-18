@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./IBCEMusic.sol";
 import "./IBCEMusicSettings.sol";
 import "./BCEMusicAuction.sol";
@@ -186,7 +187,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         uint256 fund = _withdrawalAllowances[msg.sender];
         if (fund > 0) {
             _withdrawalAllowances[msg.sender] = 0;
-            payable(msg.sender).transfer(fund);
+            payable(msg.sender).transfer(Math.min(fund, address(this).balance));
         }
     }
 }
