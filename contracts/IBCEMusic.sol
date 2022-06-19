@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import "@openzeppelin/contracts/utils/Counters.sol";
-
 interface IBCEMusic {
     //offer is a firm offer on one or more tokens of the same type
     struct OfferTerms {
@@ -10,7 +8,7 @@ interface IBCEMusic {
         uint256 totalPrice; 
         address seller;  
     }
-    //We use double linked list because we may need to delete an offer
+    //We use double-linked list because we may need to delete an offer
     //from the list using only its id for lookup.
     struct Offer {
         uint64 nextOffer; //this is a linked-list kind of structure
@@ -42,64 +40,73 @@ interface IBCEMusic {
     function getAllOutstandingOffersOnToken(uint256 tokenId) external view returns (OfferTerms[] memory);
 
     struct Bid {
+        uint16 amountAndRevealed; //the top bit is revealed or not, the remaining 15 bits hold the amount (which only needs 9 bits anyway)
         address bidder;
-        uint amount;
         uint256 earnestMoney;
         bytes32 bidHash;
-        bool revealed;
     }
+    //since bids only live for one auction, uint32 is more than enough
+    //for bid IDs and revealed bid IDs
     struct RevealedBid {
-        uint256 bidId;
+        uint32 bidId;
+        uint32 nextRevealedBidId;
         uint256 totalPrice;
-        uint nextRevealedBidId;
     }
     struct AuctionTerms {
+        uint16 amount;
         address seller;
-        uint amount;
         uint256 reservePricePerUnit;
         uint256 biddingDeadline;
         uint256 revealingDeadline;
     }
+    //Auction is also a double-linked list, and uint64 would be enough for auction IDs
     struct Auction {
+        uint16 totalInPlayRevealedBidCount; //since revealed bids may be eliminated when they are outbidded, we need to maintain a separate counter for in-play ones. And this counter cannot exceed 501 anyway
+        uint16 revealedAmount;
+        uint32 firstRevealedBidId;
+        uint32 revealedBidIdCounter;
+        uint64 nextAuction;
+        uint64 prevAuction;
+        uint256 totalHeldBalance;
         AuctionTerms terms;
         Bid[] bids;
-        mapping(uint => RevealedBid) revealedBids;
-        uint firstRevealedBidId;
-        Counters.Counter revealedBidIdCounter;
-        uint totalRevealedBidCount;
-        uint revealedAmount;
-        uint256 nextAuction;
-        uint256 prevAuction;
-        uint256 totalHeldBalance;
+        mapping(uint32 => RevealedBid) revealedBids;
     }
     struct AuctionWinner {
-        address bidder;
-        uint bidId;
-        uint amount;
+        uint16 amount;
+        uint32 bidId;
         uint256 pricePerUnit;
         uint256 actuallyPaid;
+        address bidder;
     }
     struct OutstandingAuctions {
-        uint256 firstAuctionId;
-        uint256 lastAuctionId;
-        uint totalCount;
-        Counters.Counter auctionIdCounter;
-        mapping (uint256 => Auction) auctions;
-        uint totalAuctionAmount;
-        mapping (address => uint) auctionAmountBySeller;
+        uint16 totalAuctionAmount;
+        uint48 totalCount; //I can't imagine there would be more than uint48 worth of outstanding auctions
+                           //In fact, uint8 would probably be enough, but if we do multi-song in the same contract
+                           //then we need to be somewhat conservative. Even then, uint48 would stretch the imagination.
+        uint64 firstAuctionId;
+        uint64 lastAuctionId;
+        uint64 auctionIdCounter;
+        mapping (uint64 => Auction) auctions;
+        mapping (address => uint16) auctionAmountBySeller;
     }
-    event AuctionCreated(uint tokenId, uint256 id);
-    event BidPlacedForAuction(uint tokenId, uint256 auctionId, uint256 bidId);
-    event BidRevealedForAuction(uint tokenId, uint256 auctionId, uint256 bidId);
-    event AuctionFinalized(uint tokenId, uint256 auctionId);
+    event AuctionCreated(uint256 tokenId, uint64 auctionId);
+    event BidPlacedForAuction(uint256 tokenId, uint64 auctionId, uint32 bidId);
+    event BidRevealedForAuction(uint256 tokenId, uint64 auctionId, uint32 bidId);
+    event AuctionFinalized(uint256 tokenId, uint64 auctionId);
 
-    function startAuction(uint tokenId, uint amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint256);
-    function bidOnAuction(uint tokenId, uint256 auctionId, uint amount, bytes32 bidHash) external payable returns (uint256);
-    function revealBidOnAuction(uint tokenId, uint256 auctionId, uint bidId, uint256 totalPrice, bytes32 nonce) external payable;
-    function finalizeAuction(uint tokenId, uint256 auctionId) external;
+    //the returned value is auction ID
+    function startAuction(uint256 tokenId, uint16 amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint64);
+    //the returned value is bid ID
+    //This is payable because the earnest money must be paid at this time
+    function bidOnAuction(uint256 tokenId, uint64 auctionId, uint16 amount, bytes32 bidHash) external payable returns (uint32);
+    //This is payable because the whole price must be fully paid at this time
+    function revealBidOnAuction(uint256 tokenId, uint64 auctionId, uint32 bidId, uint256 totalPrice, bytes32 nonce) external payable;
+    //Anyone can call finalizeAuction after the reveal period passes
+    function finalizeAuction(uint256 tokenId, uint64 auctionId) external;
 
-    function getAuctionById(uint tokenId, uint256 auctionId) external view returns (AuctionTerms memory);
-    function getAllAuctionsOnToken(uint tokenId) external view returns (AuctionTerms[] memory);
+    function getAuctionById(uint256 tokenId, uint64 auctionId) external view returns (AuctionTerms memory);
+    function getAllAuctionsOnToken(uint256 tokenId) external view returns (AuctionTerms[] memory);
 
     function claimWithdrawal() external;
 }

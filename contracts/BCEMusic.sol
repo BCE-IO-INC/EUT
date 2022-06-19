@@ -105,20 +105,20 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         return BCEMusicOffer.getAllOutstandingOffers(_outstandingOffers[tokenId]);
     }
 
-    function startAuction(uint tokenId, uint amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external override returns (uint256) {
+    function startAuction(uint256 tokenId, uint16 amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external override returns (uint64) {
         uint balance = balanceOf(msg.sender, tokenId);
         OutstandingAuctions storage auctions = _outstandingAuctions[tokenId];
         uint requiredAmount = amount+auctions.auctionAmountBySeller[msg.sender]+_outstandingOffers[tokenId].offerAmountBySeller[msg.sender];
         require (balance >= requiredAmount, "BA");
 
-        uint auctionId = BCEMusicAuction.startAuction(msg.sender, auctions, amount, reservePricePerUnit, biddingPeriodSeconds, revealingPeriodSeconds);
+        uint64 auctionId = BCEMusicAuction.startAuction(msg.sender, auctions, amount, reservePricePerUnit, biddingPeriodSeconds, revealingPeriodSeconds);
         
         emit AuctionCreated(tokenId, auctionId);
 
         return auctionId;
     }
-    function bidOnAuction(uint tokenId, uint256 auctionId, uint amount, bytes32 bidHash) external payable override returns (uint256) {
-        uint bidId = BCEMusicAuction.bidOnAuction(
+    function bidOnAuction(uint256 tokenId, uint64 auctionId, uint16 amount, bytes32 bidHash) external payable override returns (uint32) {
+        uint32 bidId = BCEMusicAuction.bidOnAuction(
             msg.sender
             , msg.value
             , _outstandingAuctions[tokenId].auctions[auctionId]
@@ -129,7 +129,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         emit BidPlacedForAuction(tokenId, auctionId, bidId);
         return bidId;
     }
-    function revealBidOnAuction(uint tokenId, uint256 auctionId, uint bidId, uint256 totalPrice, bytes32 nonce) external payable override {
+    function revealBidOnAuction(uint256 tokenId, uint64 auctionId, uint32 bidId, uint256 totalPrice, bytes32 nonce) external payable override {
         Auction storage auction = _outstandingAuctions[tokenId].auctions[auctionId];
         BCEMusicAuction.revealBidOnAuction(
             msg.sender
@@ -142,7 +142,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         );
         emit BidRevealedForAuction(tokenId, auctionId, bidId);
     }
-    function finalizeAuction(uint tokenId, uint256 auctionId) external override {
+    function finalizeAuction(uint256 tokenId, uint64 auctionId) external override {
         BCEMusicAuction.AuctionResult memory auctionResult = BCEMusicAuction.finalizeAuction(_outstandingAuctions[tokenId], auctionId);
         uint ownerPct = IBCEMusicSettings(_settingsAddr).ownerFeePercentForAuction();
         
@@ -182,10 +182,10 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         }
     }
 
-    function getAuctionById(uint tokenId, uint256 auctionId) external view override returns (AuctionTerms memory) {
+    function getAuctionById(uint256 tokenId, uint64 auctionId) external view override returns (AuctionTerms memory) {
         return BCEMusicAuction.getAuctionById(_outstandingAuctions[tokenId], auctionId);
     }
-    function getAllAuctionsOnToken(uint tokenId) external view override returns (AuctionTerms[] memory) {
+    function getAllAuctionsOnToken(uint256 tokenId) external view override returns (AuctionTerms[] memory) {
         return BCEMusicAuction.getAllAuctions(_outstandingAuctions[tokenId]);
     }
 
