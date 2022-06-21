@@ -168,7 +168,7 @@ library BCEMusicAuction {
         require(totalPrice <= value+bid.earnestMoney, "Not enough money to reveal.");
         require(totalPrice >= (bid.amountAndRevealed & 0x7f)*auction.terms.reservePricePerUnit, "Cannot reveal an invalid price.");
 
-        bytes memory toHash = abi.encodePacked(totalPrice, nonce);
+        bytes memory toHash = abi.encodePacked(totalPrice, nonce, bidder); //because all three are fixed length types, encodePacked would be safe
         bytes32 theHash = keccak256(toHash);
         require(theHash == bid.bidHash, "Hash does not match.");
 
