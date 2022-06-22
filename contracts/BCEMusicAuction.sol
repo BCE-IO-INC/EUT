@@ -2,6 +2,7 @@
 pragma solidity ^0.8.4;
 
 import "./IBCEMusic.sol";
+//import "hardhat/console.sol";
 
 library BCEMusicAuction {
     uint public constant AMOUNT_UPPER_LIMIT = 500;
@@ -264,6 +265,7 @@ library BCEMusicAuction {
     //(deleting all revealed bids on the way), and then deletes the auction
     //(but keeping a copy of the terms first). It then allocates the amounts
     //among the winners and calculates refunds.
+
     function finalizeAuction(IBCEMusic.OutstandingAuctions storage auctions, uint64 auctionId) external returns (AuctionResult memory) {
         IBCEMusic.Auction storage auction = auctions.auctions[auctionId];
         require(auction.terms.amount > 0, "Invalid auction.");
@@ -280,7 +282,6 @@ library BCEMusicAuction {
             });
         } else {
             IBCEMusic.AuctionWinner[] memory potentialWinners = _buildPotentialWinners(auction);
-            uint16 winnerCount = 0; //winners cannot be more than auction units, and that is bound by 500
             OneSend[] memory sends = new OneSend[](potentialWinners.length);
             uint16 cumAmount = 0;
             for (uint ii=0; ii<potentialWinners.length; ++ii) {
@@ -292,7 +293,7 @@ library BCEMusicAuction {
                 if (cumAmount + potentialWinners[ii].amount >= auction.terms.amount) {
                     potentialWinners[ii].amount = auction.terms.amount-cumAmount;
                 }
-                for (uint jj=0; jj<winnerCount; ++ii) {
+                for (uint jj=0; jj<potentialWinners.length; ++ii) {
                     if (sends[jj].receiver == potentialWinners[ii].bidder) {
                         sends[jj].amount += potentialWinners[ii].amount;
                         sends[jj].value += potentialWinners[ii].actuallyPaid-potentialWinners[ii].pricePerUnit*potentialWinners[ii].amount;

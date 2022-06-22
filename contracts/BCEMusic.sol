@@ -11,6 +11,8 @@ import "./IBCEMusicSettings.sol";
 import "./BCEMusicAuction.sol";
 import "./BCEMusicOffer.sol";
 
+//import "hardhat/console.sol";
+
 contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
 
     uint public constant DIAMOND_TOKEN_AMOUNT = 1;
@@ -156,11 +158,13 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             }
         } else {
             uint256 totalReceipt = auctionResult.totalReceipt;
+            //console.log("Got sends %s", auctionResult.sends.length);
             for (uint ii=0; ii<auctionResult.sends.length; ++ii) {
                 if (auctionResult.sends[ii].receiver == address(0)) {
                     break;
                 }
                 uint amt = auctionResult.sends[ii].amount;
+                //console.log("Send %s %s", auctionResult.sends[ii].receiver, amt);
                 if (amt > 0) {
                     _safeTransferFrom(auctionResult.terms.seller, auctionResult.sends[ii].receiver, tokenId, amt, EMPTY_BYTES);
                 }
@@ -170,6 +174,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
                     _withdrawalAllowances[auctionResult.sends[ii].receiver] += val;
                 }
             }
+            //console.log("Finalize %s", totalReceipt);
             if (owner() != auctionResult.terms.seller) {
                 uint256 ownerFee = totalReceipt*ownerPct/100;
                 _withdrawalAllowances[owner()] += ownerFee;
