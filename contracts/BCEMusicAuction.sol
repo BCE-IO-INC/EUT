@@ -58,13 +58,11 @@ library BCEMusicAuction {
     //An revealed bid is smaller if either (1) its per-unit price is lower or
     //(2) its per-unit price is the same as the other one, but its bid id is
     //higher (i.e. it is later)
-    function _compareBids(IBCEMusic.Bid[] storage bids, IBCEMusic.RevealedBid storage a, IBCEMusic.RevealedBid storage b) private view returns (bool) {
-        uint256 aPrice = a.totalPrice/(bids[a.bidId].amountAndRevealed & 0x7f);
-        uint256 bPrice = b.totalPrice/(bids[b.bidId].amountAndRevealed & 0x7f);
-        if (aPrice < bPrice) {
+    function _compareBids(IBCEMusic.RevealedBid storage a, IBCEMusic.RevealedBid storage b) private view returns (bool) {
+        if (a.pricePerUnit < b.pricePerUnit) {
             return true;
         }
-        if (aPrice == bPrice && a.bidId > b.bidId) {
+        if (a.pricePerUnit == b.pricePerUnit && a.bidId > b.bidId) {
             return true;
         }
         return false;
@@ -76,13 +74,13 @@ library BCEMusicAuction {
     //This function adds revealed bid to the single-linked list and updates statistics
     //The returned value also includes cumulative amount of all revealed bids that are
     //higher than the newly added one
-    function _addRevealedBid(IBCEMusic.Auction storage auction, uint32 bidId, uint256 totalPrice) private returns (AddedRevealedBid memory) {
+    function _addRevealedBid(IBCEMusic.Auction storage auction, uint32 bidId, uint256 pricePerUnit) private returns (AddedRevealedBid memory) {
         ++auction.revealedBidIdCounter;
         uint32 revealedBidId = auction.revealedBidIdCounter;
         auction.revealedBids[revealedBidId] = IBCEMusic.RevealedBid({
             bidId: bidId 
             , nextRevealedBidId: 0
-            , totalPrice: totalPrice
+            , pricePerUnit: pricePerUnit
         });
         auction.revealedAmount += (auction.bids[bidId].amountAndRevealed & 0x7f);
         auction.totalInPlayRevealedBidCount += 1;
@@ -97,7 +95,7 @@ library BCEMusicAuction {
             auction.firstRevealedBidId = revealedBidId;
             return ret;
         }
-        if (_compareBids(auction.bids, auction.revealedBids[auction.firstRevealedBidId], thisRevealedBid)) {
+        if (_compareBids(auction.revealedBids[auction.firstRevealedBidId], thisRevealedBid)) {
             thisRevealedBid.nextRevealedBidId = auction.firstRevealedBidId;
             auction.firstRevealedBidId = revealedBidId;
             return ret;
@@ -109,7 +107,7 @@ library BCEMusicAuction {
             if (nextId == 0) {
                 auction.revealedBids[prevId].nextRevealedBidId = revealedBidId;
                 break;
-            } else if (_compareBids(auction.bids, auction.revealedBids[nextId], thisRevealedBid)) {
+            } else if (_compareBids(auction.revealedBids[nextId], thisRevealedBid)) {
                 thisRevealedBid.nextRevealedBidId = nextId;
                 auction.revealedBids[prevId].nextRevealedBidId = revealedBidId;
                 break;
@@ -144,8 +142,9 @@ library BCEMusicAuction {
             } else {
                 auction.revealedAmount -= (auction.bids[auction.revealedBids[currentId].bidId].amountAndRevealed & 0x7f);
                 auction.totalInPlayRevealedBidCount -= 1;
-                auction.totalHeldBalance -= auction.revealedBids[currentId].totalPrice;
-                withdrawalAllowances[auction.bids[auction.revealedBids[currentId].bidId].bidder] += auction.revealedBids[currentId].totalPrice;
+                uint256 totalPrice = auction.revealedBids[currentId].pricePerUnit*(auction.bids[auction.revealedBids[currentId].bidId].amountAndRevealed & 0x7f);
+                auction.totalHeldBalance -= totalPrice;
+                withdrawalAllowances[auction.bids[auction.revealedBids[currentId].bidId].bidder] += totalPrice;
                 if (nextId == 0) {
                     break;
                 }
@@ -158,7 +157,7 @@ library BCEMusicAuction {
 
     //This function calls the two helper functions to first place the newly 
     //revealed bid, then eliminate the out-bidded ones
-    function revealBidOnAuction(address bidder, uint256 value, IBCEMusic.Auction storage auction, uint32 bidId, uint256 totalPrice, bytes32 nonce, mapping (address => uint256) storage withdrawalAllowances) external {
+    function revealBidOnAuction(address bidder, uint256 value, IBCEMusic.Auction storage auction, uint32 bidId, uint256 pricePerUnit, bytes12 nonce, mapping (address => uint256) storage withdrawalAllowances) external {
         require(auction.terms.amount > 0, "Invalid auction.");
         require(bidId <= auction.bids.length, "Invalid bid id.");
         require(block.timestamp > auction.terms.biddingDeadline, "Bidding has not yet closed.");
@@ -167,14 +166,15 @@ library BCEMusicAuction {
         IBCEMusic.Bid storage bid = auction.bids[bidId];
         require(bidder == bid.bidder, "Not your bid.");
         require((bid.amountAndRevealed & 0x80) == 0, "Duplicate revealing");
+        require(pricePerUnit >= auction.terms.reservePricePerUnit, "Cannot reveal an invalid price.");
+        uint256 totalPrice = pricePerUnit*(bid.amountAndRevealed & 0x7f);
         require(totalPrice <= value+bid.earnestMoney, "Not enough money to reveal.");
-        require(totalPrice >= (bid.amountAndRevealed & 0x7f)*auction.terms.reservePricePerUnit, "Cannot reveal an invalid price.");
 
-        bytes memory toHash = abi.encodePacked(totalPrice, nonce, bidder); //because all three are fixed length types, encodePacked would be safe
+        bytes memory toHash = abi.encodePacked(pricePerUnit, nonce, bidder); //because all three are fixed length types, encodePacked would be safe
         bytes32 theHash = keccak256(toHash);
         require(theHash == bid.bidHash, "Hash does not match.");
 
-        AddedRevealedBid memory newlyAdded = _addRevealedBid(auction, bidId, totalPrice);
+        AddedRevealedBid memory newlyAdded = _addRevealedBid(auction, bidId, pricePerUnit);
 
         bid.amountAndRevealed = (bid.amountAndRevealed | 0x80);
         if (value+bid.earnestMoney > totalPrice) {
@@ -207,11 +207,10 @@ library BCEMusicAuction {
             uint32 nextId = r.nextRevealedBidId;
             while (true) {
                 potentialWinners[ii] = IBCEMusic.AuctionWinner({
-                    bidder : auction.bids[r.bidId].bidder 
+                    amount: (auction.bids[r.bidId].amountAndRevealed & 0x7f)
                     , bidId : r.bidId
-                    , amount: (auction.bids[r.bidId].amountAndRevealed & 0x7f)
-                    , pricePerUnit: r.totalPrice/(auction.bids[r.bidId].amountAndRevealed & 0x7f)
-                    , actuallyPaid : r.totalPrice
+                    , bidder : auction.bids[r.bidId].bidder
+                    , pricePerUnit: r.pricePerUnit
                 });
                 ++ii;
                 delete(auction.revealedBids[currentId]);
@@ -285,6 +284,7 @@ library BCEMusicAuction {
             OneSend[] memory sends = new OneSend[](potentialWinners.length);
             uint16 cumAmount = 0;
             for (uint ii=0; ii<potentialWinners.length; ++ii) {
+                uint256 originalPricePerUnit = potentialWinners[ii].pricePerUnit;
                 if (ii+1 < potentialWinners.length) {
                     potentialWinners[ii].pricePerUnit = potentialWinners[ii+1].pricePerUnit;
                 } else {
@@ -296,12 +296,12 @@ library BCEMusicAuction {
                 for (uint jj=0; jj<potentialWinners.length; ++ii) {
                     if (sends[jj].receiver == potentialWinners[ii].bidder) {
                         sends[jj].amount += potentialWinners[ii].amount;
-                        sends[jj].value += potentialWinners[ii].actuallyPaid-potentialWinners[ii].pricePerUnit*potentialWinners[ii].amount;
+                        sends[jj].value += potentialWinners[ii].amount*(originalPricePerUnit-potentialWinners[ii].pricePerUnit);
                         break;
                     } else if (sends[jj].receiver == address(0)) {
                         sends[jj].receiver = potentialWinners[ii].bidder;
                         sends[jj].amount += potentialWinners[ii].amount;
-                        sends[jj].value += potentialWinners[ii].actuallyPaid-potentialWinners[ii].pricePerUnit*potentialWinners[ii].amount;
+                        sends[jj].value += potentialWinners[ii].amount*(originalPricePerUnit-potentialWinners[ii].pricePerUnit);
                         break;
                     }
                 }
