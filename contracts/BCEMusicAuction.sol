@@ -160,6 +160,7 @@ library BCEMusicAuction {
     function revealBidOnAuction(address bidder, uint256 value, IBCEMusic.Auction storage auction, uint32 bidId, uint256 totalPrice, bytes32 nonce, mapping (address => uint256) storage withdrawalAllowances) external {
         require(auction.terms.amount > 0, "Invalid auction.");
         require(bidId <= auction.bids.length, "Invalid bid id.");
+        require(block.timestamp > auction.terms.biddingDeadline, "Bidding has not yet closed.");
         require(block.timestamp <= auction.terms.revealingDeadline, "Revealing has closed.");
         
         IBCEMusic.Bid storage bid = auction.bids[bidId];
