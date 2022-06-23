@@ -1,15 +1,10 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const util = require('node:util');
+
 describe("Offer test", () => {
-    it("Settings deploy", async () => {
-        const [owner] = await ethers.getSigners();
-        const BCEMusicSettings = await ethers.getContractFactory("BCEMusicSettings");
-        const bceMusicSettings = await BCEMusicSettings.deploy();
-        const pct = await bceMusicSettings.ownerFeePercentForAuction();
-        expect(pct == 10);
-    });
-    it("Music deploy", async () => {
-        const [owner] = await ethers.getSigners();
+    it("Music offer and take", async () => {
+        const [owner, offeree] = await ethers.getSigners();
         const BCEMusicSettings = await ethers.getContractFactory("BCEMusicSettings");
         const bceMusicSettings = await BCEMusicSettings.deploy();
         const BCEMusicOffer = await ethers.getContractFactory("BCEMusicOffer");
@@ -25,5 +20,26 @@ describe("Offer test", () => {
         const bceMusic = await BCEMusic.deploy("abc", bceMusicSettings.address);
         const ownership = await bceMusic.balanceOf(owner.address, 2);
         expect(ownership.toNumber() == 499);
+        const offerTx = await bceMusic.offer(2, 10, 1000);
+        const offerRes = await offerTx.wait();
+        const offerCreatedEvent = offerRes.events.find(event => event.event === 'OfferCreated');
+        expect(offerCreatedEvent.args.tokenId.toNumber() == 2 && offerCreatedEvent.args.offerId.toNumber() == 1);
+        console.log(`\t\tOffer created, gas used=${offerRes.gasUsed.toNumber()}, offerId=${offerCreatedEvent.args.offerId}`);
+        const acceptOfferTx = await bceMusic.connect(offeree).acceptOffer(2, offerCreatedEvent.args.offerId, {
+            value: ethers.BigNumber.from(1200)
+        });
+        const acceptOfferRes = await acceptOfferTx.wait();
+        const offerFilledEvent = acceptOfferRes.events.find(event => event.event === 'OfferFilled');
+        expect(offerFilledEvent.args.tokenId.toNumber() == 2 && offerFilledEvent.args.offerId.toNumber() == 1);
+        const newOwnership = await bceMusic.balanceOf(owner.address, 2);
+        expect(newOwnership.toNumber() == 489);
+        const offereeOwnership = await bceMusic.balanceOf(offeree.address, 2);
+        expect(offereeOwnership.toNumber() == 10);
+        console.log(`\t\tOffer filled, gas used=${acceptOfferRes.gasUsed.toNumber()}`);
+        const claimTx = await bceMusic.connect(offeree).claimWithdrawal();
+        const claimRes = await claimTx.wait();
+        const withdrawalClaimedEvent = claimRes.events.find(event => event.event === 'WithdrawalClaimed');
+        expect(withdrawalClaimedEvent.args.withdrawalAmount.toNumber() == 200);
+        console.log(`\t\tExtra payment withdrawn, gas used=${claimRes.gasUsed.toNumber()}`);
     });
 });

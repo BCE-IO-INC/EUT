@@ -11,7 +11,7 @@ import "./IBCEMusicSettings.sol";
 import "./BCEMusicAuction.sol";
 import "./BCEMusicOffer.sol";
 
-//import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
 
@@ -59,6 +59,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         );
         emit OfferCreated(tokenId, offerId);
 
+        //console.log("Offer id is %s", offerId);
         return offerId;
     }
 
@@ -198,7 +199,9 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         uint256 fund = _withdrawalAllowances[msg.sender];
         if (fund > 0) {
             _withdrawalAllowances[msg.sender] = 0;
-            payable(msg.sender).transfer(Math.min(fund, address(this).balance));
+            uint256 amt = Math.min(fund, address(this).balance);
+            payable(msg.sender).transfer(amt);
+            emit WithdrawalClaimed(msg.sender, amt);
         }
     }
 }
