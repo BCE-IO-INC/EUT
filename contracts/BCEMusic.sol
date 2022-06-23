@@ -158,20 +158,20 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             }
         } else {
             uint256 totalReceipt = auctionResult.totalReceipt;
-            //console.log("Got sends %s", auctionResult.sends.length);
-            for (uint ii=0; ii<auctionResult.sends.length; ++ii) {
-                if (auctionResult.sends[ii].receiver == address(0)) {
+            //console.log("Got winners %s", auctionResult.winners.length);
+            for (uint ii=0; ii<auctionResult.winners.length; ++ii) {
+                if (auctionResult.winners[ii].bidder == address(0)) {
                     break;
                 }
-                uint amt = auctionResult.sends[ii].amount;
-                //console.log("Send %s %s", auctionResult.sends[ii].receiver, amt);
+                uint amt = auctionResult.winners[ii].amount;
+                //console.log("Send %s %s", auctionResult.winners[ii].bidder, amt);
                 if (amt > 0) {
-                    _safeTransferFrom(auctionResult.terms.seller, auctionResult.sends[ii].receiver, tokenId, amt, EMPTY_BYTES);
+                    _safeTransferFrom(auctionResult.terms.seller, auctionResult.winners[ii].bidder, tokenId, amt, EMPTY_BYTES);
                 }
-                uint256 val = auctionResult.sends[ii].value;
-                if (val > 0) {
-                    totalReceipt -= val;
-                    _withdrawalAllowances[auctionResult.sends[ii].receiver] += val;
+                uint256 refund = auctionResult.winners[ii].refund;
+                if (refund > 0) {
+                    totalReceipt -= refund;
+                    _withdrawalAllowances[auctionResult.winners[ii].bidder] += refund;
                 }
             }
             //console.log("Finalize %s", totalReceipt);

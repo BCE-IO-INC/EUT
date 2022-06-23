@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 import "./IBCEMusic.sol";
-//import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 library BCEMusicAuction {
     uint public constant AMOUNT_UPPER_LIMIT = 500;
@@ -116,6 +116,8 @@ library BCEMusicAuction {
                 nextId = auction.revealedBids[prevId].nextRevealedBidId;
             }
         }
+        console.log("inserted %s %s", ret.revealedBidId, ret.cumAmountInFront);
+        console.log("the info %s %s", auction.revealedBids[ret.revealedBidId].bidId, auction.revealedBids[ret.revealedBidId].pricePerUnit);
         return ret;
     }
     //This function starts from the newly added revealed bid and eliminates
@@ -129,6 +131,7 @@ library BCEMusicAuction {
         uint32 nextId = auction.revealedBids[currentId].nextRevealedBidId;
         uint16 cumAmount = newlyAdded.cumAmountInFront;
         while (true) {
+            console.log("Checking %s %s %s", currentId, nextId, cumAmount);
             if (cumAmount <= auction.terms.amount) {
                 cumAmount += (auction.bids[auction.revealedBids[currentId].bidId].amountAndRevealed & 0x7f);
                 if (cumAmount > auction.terms.amount) {
@@ -145,10 +148,10 @@ library BCEMusicAuction {
                 uint256 totalPrice = auction.revealedBids[currentId].pricePerUnit*(auction.bids[auction.revealedBids[currentId].bidId].amountAndRevealed & 0x7f);
                 auction.totalHeldBalance -= totalPrice;
                 withdrawalAllowances[auction.bids[auction.revealedBids[currentId].bidId].bidder] += totalPrice;
+                delete(auction.revealedBids[currentId]);
                 if (nextId == 0) {
                     break;
                 }
-                delete(auction.revealedBids[currentId]);
                 currentId = nextId;
                 nextId = auction.revealedBids[currentId].nextRevealedBidId;
             }
@@ -190,11 +193,6 @@ library BCEMusicAuction {
 
         _eliminateOutBiddedRevealedBids(auction, newlyAdded, withdrawalAllowances);
     }
-    struct OneSend {
-        address receiver;
-        uint16 amount;
-        uint256 value;
-    }
     //This function build an array of all potentional winners from the 
     //currently kept linked-list of revealed bids, and it deletes all
     //the revealed bids since they are no longer needed
@@ -211,13 +209,14 @@ library BCEMusicAuction {
                     , bidId : r.bidId
                     , bidder : auction.bids[r.bidId].bidder
                     , pricePerUnit: r.pricePerUnit
+                    , refund: 0
                 });
                 ++ii;
                 delete(auction.revealedBids[currentId]);
                 if (nextId == 0) {
                     break;
                 }
-                currentId = auction.firstRevealedBidId;
+                currentId = nextId;
                 r = auction.revealedBids[currentId];
                 nextId = r.nextRevealedBidId;
             }
@@ -255,7 +254,6 @@ library BCEMusicAuction {
         return terms;
     }
     struct AuctionResult {
-        OneSend[] sends;
         IBCEMusic.AuctionWinner[] winners;
         uint256 totalReceipt;
         IBCEMusic.AuctionTerms terms;
@@ -274,14 +272,12 @@ library BCEMusicAuction {
             uint256 totalReceipt = auction.totalHeldBalance;
             IBCEMusic.AuctionTerms memory terms = _removeAuction(auctions, auctionId, auction);
             return AuctionResult({
-                sends: new OneSend[](0)
-                , winners: new IBCEMusic.AuctionWinner[](0)
+                winners: new IBCEMusic.AuctionWinner[](0)
                 , totalReceipt: totalReceipt
                 , terms: terms
             });
         } else {
             IBCEMusic.AuctionWinner[] memory potentialWinners = _buildPotentialWinners(auction);
-            OneSend[] memory sends = new OneSend[](potentialWinners.length);
             uint16 cumAmount = 0;
             for (uint ii=0; ii<potentialWinners.length; ++ii) {
                 uint256 originalPricePerUnit = potentialWinners[ii].pricePerUnit;
@@ -293,18 +289,7 @@ library BCEMusicAuction {
                 if (cumAmount + potentialWinners[ii].amount >= auction.terms.amount) {
                     potentialWinners[ii].amount = auction.terms.amount-cumAmount;
                 }
-                for (uint jj=0; jj<potentialWinners.length; ++ii) {
-                    if (sends[jj].receiver == potentialWinners[ii].bidder) {
-                        sends[jj].amount += potentialWinners[ii].amount;
-                        sends[jj].value += potentialWinners[ii].amount*(originalPricePerUnit-potentialWinners[ii].pricePerUnit);
-                        break;
-                    } else if (sends[jj].receiver == address(0)) {
-                        sends[jj].receiver = potentialWinners[ii].bidder;
-                        sends[jj].amount += potentialWinners[ii].amount;
-                        sends[jj].value += potentialWinners[ii].amount*(originalPricePerUnit-potentialWinners[ii].pricePerUnit);
-                        break;
-                    }
-                }
+                potentialWinners[ii].refund = potentialWinners[ii].amount*(originalPricePerUnit-potentialWinners[ii].pricePerUnit);
                 cumAmount += potentialWinners[ii].amount;
             }
 
@@ -312,8 +297,7 @@ library BCEMusicAuction {
             IBCEMusic.AuctionTerms memory terms = _removeAuction(auctions, auctionId, auction);
 
             return AuctionResult({
-                sends: sends
-                , winners: potentialWinners
+                winners: potentialWinners
                 , totalReceipt: totalReceipt
                 , terms: terms
             });

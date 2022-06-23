@@ -77,6 +77,7 @@ interface IBCEMusic {
         uint32 bidId;
         address bidder;
         uint256 pricePerUnit;
+        uint256 refund;
     }
     struct OutstandingAuctions {
         uint16 totalAuctionAmount;
