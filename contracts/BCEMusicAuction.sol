@@ -116,10 +116,13 @@ library BCEMusicAuction {
                 nextId = auction.revealedBids[prevId].nextRevealedBidId;
             }
         }
-        console.log("inserted %s %s", ret.revealedBidId, ret.cumAmountInFront);
-        console.log("the info %s %s", auction.revealedBids[ret.revealedBidId].bidId, auction.revealedBids[ret.revealedBidId].pricePerUnit);
+        //console.log("inserted %s %s", ret.revealedBidId, ret.cumAmountInFront);
+        //console.log("the info %s %s", auction.revealedBids[ret.revealedBidId].bidId, auction.revealedBids[ret.revealedBidId].pricePerUnit);
         return ret;
     }
+
+    event ClaimIncreased(address claimant, uint256 increaseAmount);
+
     //This function starts from the newly added revealed bid and eliminates
     //all out-bidded revealed bids (except at most one, to provide a reference
     //price for the next higher one)
@@ -131,7 +134,7 @@ library BCEMusicAuction {
         uint32 nextId = auction.revealedBids[currentId].nextRevealedBidId;
         uint16 cumAmount = newlyAdded.cumAmountInFront;
         while (true) {
-            console.log("Checking %s %s %s", currentId, nextId, cumAmount);
+            //console.log("Checking %s %s %s", currentId, nextId, cumAmount);
             if (cumAmount <= auction.terms.amount) {
                 cumAmount += (auction.bids[auction.revealedBids[currentId].bidId].amountAndRevealed & 0x7f);
                 if (cumAmount > auction.terms.amount) {
@@ -148,6 +151,7 @@ library BCEMusicAuction {
                 uint256 totalPrice = auction.revealedBids[currentId].pricePerUnit*(auction.bids[auction.revealedBids[currentId].bidId].amountAndRevealed & 0x7f);
                 auction.totalHeldBalance -= totalPrice;
                 withdrawalAllowances[auction.bids[auction.revealedBids[currentId].bidId].bidder] += totalPrice;
+                emit ClaimIncreased(auction.bids[auction.revealedBids[currentId].bidId].bidder, totalPrice);
                 delete(auction.revealedBids[currentId]);
                 if (nextId == 0) {
                     break;
@@ -182,6 +186,7 @@ library BCEMusicAuction {
         bid.amountAndRevealed = (bid.amountAndRevealed | 0x80);
         if (value+bid.earnestMoney > totalPrice) {
             withdrawalAllowances[bidder] += value+bid.earnestMoney-totalPrice;
+            emit ClaimIncreased(bidder, value+bid.earnestMoney-totalPrice);
             if (totalPrice < bid.earnestMoney) {
                 auction.totalHeldBalance -= bid.earnestMoney-totalPrice;
             } else {

@@ -83,11 +83,15 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         if (owner() != theOfferTermsCopy.seller) {
             _withdrawalAllowances[theOfferTermsCopy.seller] += theOfferTermsCopy.totalPrice-ownerFee;
             _withdrawalAllowances[owner()] += ownerFee;
+            emit ClaimIncreased(theOfferTermsCopy.seller, theOfferTermsCopy.totalPrice-ownerFee);
+            emit ClaimIncreased(owner(), ownerFee);
         } else {
             _withdrawalAllowances[owner()] += theOfferTermsCopy.totalPrice;
+            emit ClaimIncreased(owner(), theOfferTermsCopy.totalPrice);
         }
         if (msg.value > theOfferTermsCopy.totalPrice) {
             _withdrawalAllowances[msg.sender] += msg.value-theOfferTermsCopy.totalPrice;
+            emit ClaimIncreased(msg.sender, msg.value-theOfferTermsCopy.totalPrice);
         }
         emit OfferFilled(tokenId, offerId);
     }
@@ -154,8 +158,11 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
                 uint256 ownerFee = auctionResult.totalReceipt*ownerPct/100;
                 _withdrawalAllowances[owner()] += ownerFee;
                 _withdrawalAllowances[auctionResult.terms.seller] += auctionResult.totalReceipt-ownerFee;
+                emit ClaimIncreased(owner(), ownerFee);
+                emit ClaimIncreased(auctionResult.terms.seller, auctionResult.totalReceipt-ownerFee);
             } else {
                 _withdrawalAllowances[owner()] += auctionResult.totalReceipt;
+                emit ClaimIncreased(owner(), auctionResult.totalReceipt);
             }
         } else {
             uint256 totalReceipt = auctionResult.totalReceipt;
@@ -173,6 +180,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
                 if (refund > 0) {
                     totalReceipt -= refund;
                     _withdrawalAllowances[auctionResult.winners[ii].bidder] += refund;
+                    emit ClaimIncreased(auctionResult.winners[ii].bidder, refund);
                 }
             }
             //console.log("Finalize %s", totalReceipt);
@@ -180,8 +188,11 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
                 uint256 ownerFee = totalReceipt*ownerPct/100;
                 _withdrawalAllowances[owner()] += ownerFee;
                 _withdrawalAllowances[auctionResult.terms.seller] += totalReceipt-ownerFee;
+                emit ClaimIncreased(owner(), ownerFee);
+                emit ClaimIncreased(auctionResult.terms.seller, totalReceipt-ownerFee);
             } else {
                 _withdrawalAllowances[owner()] += totalReceipt;
+                emit ClaimIncreased(owner(), totalReceipt);
             }
 
             emit AuctionFinalized(tokenId, auctionId);
@@ -201,7 +212,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             _withdrawalAllowances[msg.sender] = 0;
             uint256 amt = Math.min(fund, address(this).balance);
             payable(msg.sender).transfer(amt);
-            emit WithdrawalClaimed(msg.sender, amt);
+            emit ClaimWithdrawn(msg.sender, amt);
         }
     }
 }

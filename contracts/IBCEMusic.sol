@@ -109,6 +109,7 @@ interface IBCEMusic {
     function getAuctionById(uint256 tokenId, uint64 auctionId) external view returns (AuctionTerms memory);
     function getAllAuctionsOnToken(uint256 tokenId) external view returns (AuctionTerms[] memory);
 
-    event WithdrawalClaimed(address claimer, uint256 withdrawalAmount);
+    event ClaimIncreased(address claimant, uint256 increaseAmount);
+    event ClaimWithdrawn(address claimant, uint256 withdrawalAmount);
     function claimWithdrawal() external;
 }

@@ -35,10 +35,17 @@ describe("Offer test", () => {
         expect(newOwnership.toNumber() == 489);
         const offereeOwnership = await bceMusic.balanceOf(offeree.address, 2);
         expect(offereeOwnership.toNumber() == 10);
+        for (const event of acceptOfferRes.events) {
+            if (event.event === 'TransferSingle') {
+                console.log(`\t\tOffer transfer: from ${event.args.from} to ${event.args.to}: ${event.args.value} tokens`);
+            } else if (event.event === 'ClaimIncreased') {
+                console.log(`\t\tClaim increase: ${event.args.claimant} got ${event.args.increaseAmount}`);
+            }
+        }
         console.log(`\t\tOffer filled, gas used=${acceptOfferRes.gasUsed.toNumber()}`);
         const claimTx = await bceMusic.connect(offeree).claimWithdrawal();
         const claimRes = await claimTx.wait();
-        const withdrawalClaimedEvent = claimRes.events.find(event => event.event === 'WithdrawalClaimed');
+        const withdrawalClaimedEvent = claimRes.events.find(event => event.event === 'ClaimWithdrawn');
         expect(withdrawalClaimedEvent.args.withdrawalAmount.toNumber() == 200);
         console.log(`\t\tExtra payment withdrawn, gas used=${claimRes.gasUsed.toNumber()}`);
     });
