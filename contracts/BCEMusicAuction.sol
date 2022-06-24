@@ -286,6 +286,7 @@ library BCEMusicAuction {
             uint16 cumAmount = 0;
             for (uint ii=0; ii<potentialWinners.length; ++ii) {
                 uint256 originalPricePerUnit = potentialWinners[ii].pricePerUnit;
+                uint16 originalAmount = potentialWinners[ii].amount;
                 if (ii+1 < potentialWinners.length) {
                     potentialWinners[ii].pricePerUnit = potentialWinners[ii+1].pricePerUnit;
                 } else {
@@ -294,7 +295,7 @@ library BCEMusicAuction {
                 if (cumAmount + potentialWinners[ii].amount >= auction.terms.amount) {
                     potentialWinners[ii].amount = auction.terms.amount-cumAmount;
                 }
-                potentialWinners[ii].refund = potentialWinners[ii].amount*(originalPricePerUnit-potentialWinners[ii].pricePerUnit);
+                potentialWinners[ii].refund = originalAmount*originalPricePerUnit-potentialWinners[ii].amount*potentialWinners[ii].pricePerUnit;
                 cumAmount += potentialWinners[ii].amount;
             }
 
