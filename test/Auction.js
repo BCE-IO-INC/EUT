@@ -55,7 +55,7 @@ describe("Auction test", () => {
         });
         const bceMusic = await BCEMusic.deploy("abc", bceMusicSettings.address);
 
-        const auctionTx = await bceMusic.startAuction(2, 100, 10, 120, 120);
+        const auctionTx = await bceMusic.startAuction(2, 100, 0, 0, 10, 120, 120);
         const auctionRes = await auctionTx.wait();
         const auctionCreatedEvent = auctionRes.events.find(event => event.event === 'AuctionCreated');
         expect(auctionCreatedEvent.args.tokenId.toNumber() == 2 && auctionCreatedEvent.args.auctionId.toNumber() == 1);

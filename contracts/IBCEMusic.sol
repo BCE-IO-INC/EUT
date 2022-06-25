@@ -54,6 +54,8 @@ interface IBCEMusic {
     }
     struct AuctionTerms {
         uint16 amount;
+        uint16 minimumBidAmount; //this is the minimum amount one can bid, for example, if this is 5, then one can bid for 5, 6, 11 units, or anything no less than 5
+        uint16 bidUnit; //this is the unit one can bid, for example, if this is 5, then one can bid for 5, 10, 15 units, or anything that is a multiple of 5
         address seller;
         uint256 reservePricePerUnit;
         uint256 biddingDeadline;
@@ -96,7 +98,7 @@ interface IBCEMusic {
     event AuctionFinalized(uint256 tokenId, uint64 auctionId);
 
     //the returned value is auction ID
-    function startAuction(uint256 tokenId, uint16 amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint64);
+    function startAuction(uint256 tokenId, uint16 amount, uint16 minimumBidAmount, uint16 bidUnit, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint64);
     //the returned value is bid ID
     //This is payable because the earnest money must be paid at this time
     function bidOnAuction(uint256 tokenId, uint64 auctionId, uint16 amount, bytes32 bidHash) external payable returns (uint32);

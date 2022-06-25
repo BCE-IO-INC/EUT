@@ -2,14 +2,16 @@
 pragma solidity ^0.8.4;
 
 import "./IBCEMusic.sol";
-import "hardhat/console.sol";
+//import "hardhat/console.sol";
 
 library BCEMusicAuction {
     uint public constant AMOUNT_UPPER_LIMIT = 500;
 
     //This function simply adds an auction to the double-linked list and returns its ID
-    function startAuction(address seller, IBCEMusic.OutstandingAuctions storage auctions, uint16 amount, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint64) {
+    function startAuction(address seller, IBCEMusic.OutstandingAuctions storage auctions, uint16 amount, uint16 minimumBidAmount, uint16 bidUnit, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint64) {
         require(amount > 0 && amount < AMOUNT_UPPER_LIMIT, "Invalid amount.");
+        require(minimumBidAmount <= amount, "Invalid minimum bid amount.");
+        require(bidUnit <= amount, "Invalid bid unit.");
         require(reservePricePerUnit > 0, "Invalid reserve price.");
       
         ++auctions.auctionIdCounter;
@@ -17,6 +19,8 @@ library BCEMusicAuction {
         IBCEMusic.Auction storage auction = auctions.auctions[auctionId];
         auction.terms = IBCEMusic.AuctionTerms({
             amount: amount
+            , minimumBidAmount : minimumBidAmount 
+            , bidUnit : bidUnit
             , seller: seller 
             , reservePricePerUnit: reservePricePerUnit
             , biddingDeadline: block.timestamp+biddingPeriodSeconds
@@ -40,7 +44,8 @@ library BCEMusicAuction {
     //This function adds bid to the array in the auction and returns its it
     function bidOnAuction(address seller, uint256 value, IBCEMusic.Auction storage auction, uint16 amount, bytes32 bidHash) external returns (uint32) {
         require(auction.terms.amount > 0, "Invalid auction.");
-        require(amount > 0 && amount <= auction.terms.amount, "Invalid amount.");
+        require(amount > 0 && amount >= auction.terms.minimumBidAmount && amount <= auction.terms.amount, "Invalid amount.");
+        require(auction.terms.bidUnit <= 1 || (amount%auction.terms.bidUnit) == 0, "Invalid amount unit.");
         require(value >= auction.terms.reservePricePerUnit*amount*2, "Insufficient earnest money");
         require(block.timestamp <= auction.terms.biddingDeadline, "Bidding has closed.");
 
