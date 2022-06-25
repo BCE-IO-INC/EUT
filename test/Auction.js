@@ -112,4 +112,152 @@ describe("Auction test", () => {
         var finalizeEvent = finalizeRes.events.find(event => event.event === 'AuctionFinalized');
         console.log(`\t\tAuction ${finalizeEvent.args.auctionId} finalized, gas used=${finalizeRes.gasUsed.toNumber()}`);
     });
+    /*
+    it("Music auction (pressure test)", async () => {
+        const signers = await ethers.getSigners();
+        const owner = signers[0];
+
+        const BCEMusicSettings = await ethers.getContractFactory("BCEMusicSettings");
+        const bceMusicSettings = await BCEMusicSettings.deploy();
+        const BCEMusicOffer = await ethers.getContractFactory("BCEMusicOffer");
+        const bceMusicOffer = await BCEMusicOffer.deploy();
+        const BCEMusicAuction = await ethers.getContractFactory("BCEMusicAuction");
+        const bceMusicAuction = await BCEMusicAuction.deploy();
+        const BCEMusic = await ethers.getContractFactory("BCEMusic", {
+            libraries : {
+                BCEMusicOffer: bceMusicOffer.address
+                , BCEMusicAuction: bceMusicAuction.address
+            }
+        });
+        const bceMusic = await BCEMusic.deploy("abc", bceMusicSettings.address);
+
+        const auctionTx = await bceMusic.startAuction(2, 499, 0, 0, 10, 3000, 3000);
+        const auctionRes = await auctionTx.wait();
+        const auctionCreatedEvent = auctionRes.events.find(event => event.event === 'AuctionCreated');
+        expect(auctionCreatedEvent.args.tokenId.toNumber() == 2 && auctionCreatedEvent.args.auctionId.toNumber() == 1);
+
+        for (var ii=0; ii<1000; ++ii) {
+            //each person bids for 1 token at increasing price, with nonce=person number 
+            var signerIdx = (ii%10)+1;
+            var placeBidTx = await bceMusic.connect(signers[signerIdx]).bidOnAuction(
+                2, 1, 1, bidHash(11+ii, signerIdx, signers[signerIdx].address)
+                , {
+                    value: ethers.BigNumber.from(20)
+                }
+            );
+            var placeBidRes = await placeBidTx.wait();
+            var bidPlacedEvent = placeBidRes.events.find(event => event.event === 'BidPlacedForAuction');
+            console.log(`\t\tBid id ${bidPlacedEvent.args.bidId} placed, gas used=${placeBidRes.gasUsed.toNumber()}`);
+        }
+        await network.provider.send("evm_increaseTime", [3000]);
+        await network.provider.send("evm_mine");
+        for (var ii=0; ii<1000; ++ii) {
+            var toSend = 11+ii-20;
+            if (toSend <= 0) {
+                toSend = 10;
+            }
+            var signerIdx = (ii%10)+1;
+            var revealBidTx = await bceMusic.connect(signers[signerIdx]).revealBidOnAuction(
+                2, 1, ii, 11+ii, asByte12String(signerIdx)
+                , {
+                    value: ethers.BigNumber.from(toSend)
+                }
+            );
+            var revealBidRes = await revealBidTx.wait();
+            for (const event of revealBidRes.events) {
+                if (event.event === 'ClaimIncreased') {
+                    console.log(`\t\tClaim increase: ${event.args.claimant} got ${event.args.increaseAmount}`);
+                }
+            }
+            var bidRevealedEvent = revealBidRes.events.find(event => event.event === 'BidRevealedForAuction');
+            console.log(`\t\tBid id ${bidRevealedEvent.args.bidId} revealed, gas used=${revealBidRes.gasUsed.toNumber()}`);
+        }
+        await network.provider.send("evm_increaseTime", [3000]);
+        await network.provider.send("evm_mine");
+        var finalizeTx = await bceMusic.finalizeAuction(2, 1);
+        var finalizeRes = await finalizeTx.wait();
+        for (const event of finalizeRes.events) {
+            if (event.event === 'TransferSingle') {
+                console.log(`\t\tAuction transfer: from ${event.args.from} to ${event.args.to}: ${event.args.value} tokens`);
+            } else if (event.event === 'ClaimIncreased') {
+                console.log(`\t\tClaim increase: ${event.args.claimant} got ${event.args.increaseAmount}`);
+            }
+        }
+        var finalizeEvent = finalizeRes.events.find(event => event.event === 'AuctionFinalized');
+        console.log(`\t\tAuction ${finalizeEvent.args.auctionId} finalized, gas used=${finalizeRes.gasUsed.toNumber()}`);
+    });
+    */
+    it("Music auction (medium pressure test)", async () => {
+        const signers = await ethers.getSigners();
+        const owner = signers[0];
+
+        const BCEMusicSettings = await ethers.getContractFactory("BCEMusicSettings");
+        const bceMusicSettings = await BCEMusicSettings.deploy();
+        const BCEMusicOffer = await ethers.getContractFactory("BCEMusicOffer");
+        const bceMusicOffer = await BCEMusicOffer.deploy();
+        const BCEMusicAuction = await ethers.getContractFactory("BCEMusicAuction");
+        const bceMusicAuction = await BCEMusicAuction.deploy();
+        const BCEMusic = await ethers.getContractFactory("BCEMusic", {
+            libraries : {
+                BCEMusicOffer: bceMusicOffer.address
+                , BCEMusicAuction: bceMusicAuction.address
+            }
+        });
+        const bceMusic = await BCEMusic.deploy("abc", bceMusicSettings.address);
+
+        const auctionTx = await bceMusic.startAuction(2, 100, 0, 0, 10, 3000, 3000);
+        const auctionRes = await auctionTx.wait();
+        const auctionCreatedEvent = auctionRes.events.find(event => event.event === 'AuctionCreated');
+        expect(auctionCreatedEvent.args.tokenId.toNumber() == 2 && auctionCreatedEvent.args.auctionId.toNumber() == 1);
+
+        for (var ii=0; ii<200; ++ii) {
+            //each person bids for 1 token at increasing price, with nonce=person number 
+            var signerIdx = (ii%10)+1;
+            var placeBidTx = await bceMusic.connect(signers[signerIdx]).bidOnAuction(
+                2, 1, 1, bidHash(11+ii, signerIdx, signers[signerIdx].address)
+                , {
+                    value: ethers.BigNumber.from(20)
+                }
+            );
+            var placeBidRes = await placeBidTx.wait();
+            var bidPlacedEvent = placeBidRes.events.find(event => event.event === 'BidPlacedForAuction');
+            console.log(`\t\tBid id ${bidPlacedEvent.args.bidId} placed, gas used=${placeBidRes.gasUsed.toNumber()}`);
+        }
+        await network.provider.send("evm_increaseTime", [3000]);
+        await network.provider.send("evm_mine");
+        for (var ii=0; ii<200; ++ii) {
+            var toSend = 11+ii-20;
+            if (toSend <= 0) {
+                toSend = 10;
+            }
+            var signerIdx = (ii%10)+1;
+            var revealBidTx = await bceMusic.connect(signers[signerIdx]).revealBidOnAuction(
+                2, 1, ii, 11+ii, asByte12String(signerIdx)
+                , {
+                    value: ethers.BigNumber.from(toSend)
+                }
+            );
+            var revealBidRes = await revealBidTx.wait();
+            for (const event of revealBidRes.events) {
+                if (event.event === 'ClaimIncreased') {
+                    console.log(`\t\tClaim increase: ${event.args.claimant} got ${event.args.increaseAmount}`);
+                }
+            }
+            var bidRevealedEvent = revealBidRes.events.find(event => event.event === 'BidRevealedForAuction');
+            console.log(`\t\tBid id ${bidRevealedEvent.args.bidId} revealed, gas used=${revealBidRes.gasUsed.toNumber()}`);
+        }
+        await network.provider.send("evm_increaseTime", [3000]);
+        await network.provider.send("evm_mine");
+        var finalizeTx = await bceMusic.finalizeAuction(2, 1);
+        var finalizeRes = await finalizeTx.wait();
+        for (const event of finalizeRes.events) {
+            if (event.event === 'TransferSingle') {
+                console.log(`\t\tAuction transfer: from ${event.args.from} to ${event.args.to}: ${event.args.value} tokens`);
+            } else if (event.event === 'ClaimIncreased') {
+                console.log(`\t\tClaim increase: ${event.args.claimant} got ${event.args.increaseAmount}`);
+            }
+        }
+        var finalizeEvent = finalizeRes.events.find(event => event.event === 'AuctionFinalized');
+        console.log(`\t\tAuction ${finalizeEvent.args.auctionId} finalized, gas used=${finalizeRes.gasUsed.toNumber()}`);
+    });
 });
