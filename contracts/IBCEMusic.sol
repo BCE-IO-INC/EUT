@@ -99,7 +99,7 @@ interface IBCEMusic {
     //the returned value is auction ID
     function startAuction(uint256 tokenId, uint16 amount, uint16 minimumBidAmount, uint16 bidUnit, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint64);
     //the returned value is bid ID
-    //This is payable because the earnest money must be paid at this time
+    //This is no longer payable because there is no more requirement of earnest money
     function bidOnAuction(uint256 tokenId, uint64 auctionId, uint16 amount, bytes32 bidHash) external returns (uint32);
     //This is payable because the whole price must be fully paid at this time
     //nonce is bytes12 because then nonce+bidder will fit in bytes32
