@@ -169,7 +169,7 @@ library BCEMusicAuction {
 
     //This function calls the two helper functions to first place the newly 
     //revealed bid, then eliminate the out-bidded ones
-    function revealBidOnAuction(address bidder, uint256 value, IBCEMusic.Auction storage auction, uint32 bidId, uint256 pricePerUnit, bytes12 nonce, mapping (address => uint256) storage withdrawalAllowances) external {
+    function revealBidOnAuction(address bidder, uint256 value, IBCEMusic.Auction storage auction, uint32 bidId, uint256 pricePerUnit, bytes32 nonce, mapping (address => uint256) storage withdrawalAllowances) external {
         require(auction.terms.amount > 0, "Invalid auction.");
         require(bidId <= auction.bids.length, "Invalid bid id.");
         require(block.timestamp > auction.terms.biddingDeadline, "Bidding has not yet closed.");

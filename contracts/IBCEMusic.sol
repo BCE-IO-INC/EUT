@@ -103,8 +103,7 @@ interface IBCEMusic {
     //This is payable because the earnest money must be paid at this time
     function bidOnAuction(uint256 tokenId, uint64 auctionId, uint16 amount, bytes32 bidHash) external payable returns (uint32);
     //This is payable because the whole price must be fully paid at this time
-    //nonce is bytes12 because then nonce+bidder will fit in bytes32
-    function revealBidOnAuction(uint256 tokenId, uint64 auctionId, uint32 bidId, uint256 pricePerUnit, bytes12 nonce) external payable;
+    function revealBidOnAuction(uint256 tokenId, uint64 auctionId, uint32 bidId, uint256 pricePerUnit, bytes32 nonce) external payable;
     //Anyone can call finalizeAuction after the reveal period passes
     function finalizeAuction(uint256 tokenId, uint64 auctionId) external;
 

@@ -11,22 +11,13 @@ function asUint256ByteArray(x) {
     }
     return ret;
 }
-function asUint96ByteArray(x) {
-    const n = ethers.BigNumber.from(x);
-    const arr = ethers.utils.arrayify(n);
-    var ret = new Uint8Array(12);
-    for (var ii=0; ii<arr.length; ++ii) {
-        ret[12-arr.length+ii] = arr[ii];
-    }
-    return ret;
-}
-function asByte12String(x) {
-    return ethers.utils.hexlify(asUint96ByteArray(x));
+function asByte32String(x) {
+    return ethers.utils.hexlify(asUint256ByteArray(x));
 }
 function bidHash(price, nonce, address) {
     const y = [
         asUint256ByteArray(price)
-        , asUint96ByteArray(nonce)
+        , asUint256ByteArray(nonce)
         , ethers.utils.arrayify(ethers.BigNumber.from(address))
     ];
     var arr = new Uint8Array(y[0].length+y[1].length+y[2].length);
@@ -84,7 +75,7 @@ describe("Auction test", () => {
                 toSend = 10;
             }
             var revealBidTx = await bceMusic.connect(signers[ii]).revealBidOnAuction(
-                2, 1, ii-1, 21-ii, asByte12String(ii)
+                2, 1, ii-1, 21-ii, asByte32String(ii)
                 , {
                     value: ethers.BigNumber.from(toSend)
                 }
@@ -158,7 +149,7 @@ describe("Auction test", () => {
             }
             var signerIdx = (ii%10)+1;
             var revealBidTx = await bceMusic.connect(signers[signerIdx]).revealBidOnAuction(
-                2, 1, ii, 11+ii, asByte12String(signerIdx)
+                2, 1, ii, 11+ii, asByte32String(signerIdx)
                 , {
                     value: ethers.BigNumber.from(toSend)
                 }
@@ -232,7 +223,7 @@ describe("Auction test", () => {
             }
             var signerIdx = (ii%10)+1;
             var revealBidTx = await bceMusic.connect(signers[signerIdx]).revealBidOnAuction(
-                2, 1, ii, 11+ii, asByte12String(signerIdx)
+                2, 1, ii, 11+ii, asByte32String(signerIdx)
                 , {
                     value: ethers.BigNumber.from(toSend)
                 }
