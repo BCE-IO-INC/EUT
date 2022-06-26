@@ -42,7 +42,6 @@ interface IBCEMusic {
     struct Bid {
         uint16 amountAndRevealed; //the top bit is revealed or not, the remaining 15 bits hold the amount (which only needs 9 bits anyway)
         address bidder;
-        uint256 earnestMoney;
         bytes32 bidHash;
     }
     //since bids only live for one auction, uint32 is more than enough
@@ -101,7 +100,7 @@ interface IBCEMusic {
     function startAuction(uint256 tokenId, uint16 amount, uint16 minimumBidAmount, uint16 bidUnit, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint64);
     //the returned value is bid ID
     //This is payable because the earnest money must be paid at this time
-    function bidOnAuction(uint256 tokenId, uint64 auctionId, uint16 amount, bytes32 bidHash) external payable returns (uint32);
+    function bidOnAuction(uint256 tokenId, uint64 auctionId, uint16 amount, bytes32 bidHash) external returns (uint32);
     //This is payable because the whole price must be fully paid at this time
     //nonce is bytes12 because then nonce+bidder will fit in bytes32
     function revealBidOnAuction(uint256 tokenId, uint64 auctionId, uint32 bidId, uint256 pricePerUnit, bytes12 nonce) external payable;

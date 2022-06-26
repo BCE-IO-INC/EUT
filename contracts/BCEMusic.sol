@@ -124,10 +124,9 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
 
         return auctionId;
     }
-    function bidOnAuction(uint256 tokenId, uint64 auctionId, uint16 amount, bytes32 bidHash) external payable override returns (uint32) {
+    function bidOnAuction(uint256 tokenId, uint64 auctionId, uint16 amount, bytes32 bidHash) external override returns (uint32) {
         uint32 bidId = BCEMusicAuction.bidOnAuction(
             msg.sender
-            , msg.value
             , _outstandingAuctions[tokenId].auctions[auctionId]
             , amount
             , bidHash

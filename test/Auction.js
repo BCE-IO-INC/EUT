@@ -68,9 +68,6 @@ describe("Auction test", () => {
             //person 10 bid for 20 tokens at price 11 (nonce 10)
             var placeBidTx = await bceMusic.connect(signers[ii]).bidOnAuction(
                 2, 1, ii*2, bidHash(21-ii, ii, signers[ii].address)
-                , {
-                    value: ethers.BigNumber.from(ii*40)
-                }
             );
             var placeBidRes = await placeBidTx.wait();
             var bidPlacedEvent = placeBidRes.events.find(event => event.event === 'BidPlacedForAuction');
@@ -79,10 +76,7 @@ describe("Auction test", () => {
         await network.provider.send("evm_increaseTime", [120]);
         await network.provider.send("evm_mine");
         for (var ii=1; ii<=10; ++ii) {
-            var toSend = (21-ii)*ii*2-ii*40;
-            if (toSend <= 0) {
-                toSend = 10;
-            }
+            var toSend = (21-ii)*ii*2;
             var revealBidTx = await bceMusic.connect(signers[ii]).revealBidOnAuction(
                 2, 1, ii-1, 21-ii, asByte12String(ii)
                 , {
@@ -141,9 +135,6 @@ describe("Auction test", () => {
             var signerIdx = (ii%10)+1;
             var placeBidTx = await bceMusic.connect(signers[signerIdx]).bidOnAuction(
                 2, 1, 1, bidHash(11+ii, signerIdx, signers[signerIdx].address)
-                , {
-                    value: ethers.BigNumber.from(20)
-                }
             );
             var placeBidRes = await placeBidTx.wait();
             var bidPlacedEvent = placeBidRes.events.find(event => event.event === 'BidPlacedForAuction');
@@ -152,10 +143,7 @@ describe("Auction test", () => {
         await network.provider.send("evm_increaseTime", [3000]);
         await network.provider.send("evm_mine");
         for (var ii=0; ii<1000; ++ii) {
-            var toSend = 11+ii-20;
-            if (toSend <= 0) {
-                toSend = 10;
-            }
+            var toSend = 11+ii;
             var signerIdx = (ii%10)+1;
             var revealBidTx = await bceMusic.connect(signers[signerIdx]).revealBidOnAuction(
                 2, 1, ii, 11+ii, asByte12String(signerIdx)
@@ -215,9 +203,6 @@ describe("Auction test", () => {
             var signerIdx = (ii%10)+1;
             var placeBidTx = await bceMusic.connect(signers[signerIdx]).bidOnAuction(
                 2, 1, 1, bidHash(11+ii, signerIdx, signers[signerIdx].address)
-                , {
-                    value: ethers.BigNumber.from(20)
-                }
             );
             var placeBidRes = await placeBidTx.wait();
             var bidPlacedEvent = placeBidRes.events.find(event => event.event === 'BidPlacedForAuction');
@@ -226,10 +211,7 @@ describe("Auction test", () => {
         await network.provider.send("evm_increaseTime", [3000]);
         await network.provider.send("evm_mine");
         for (var ii=0; ii<200; ++ii) {
-            var toSend = 11+ii-20;
-            if (toSend <= 0) {
-                toSend = 10;
-            }
+            var toSend = 11+ii;
             var signerIdx = (ii%10)+1;
             var revealBidTx = await bceMusic.connect(signers[signerIdx]).revealBidOnAuction(
                 2, 1, ii, 11+ii, asByte12String(signerIdx)

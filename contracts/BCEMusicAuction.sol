@@ -42,21 +42,18 @@ library BCEMusicAuction {
         return auctionId;
     }
     //This function adds bid to the array in the auction and returns its it
-    function bidOnAuction(address seller, uint256 value, IBCEMusic.Auction storage auction, uint16 amount, bytes32 bidHash) external returns (uint32) {
+    function bidOnAuction(address seller, IBCEMusic.Auction storage auction, uint16 amount, bytes32 bidHash) external returns (uint32) {
         require(auction.terms.amount > 0, "Invalid auction.");
         require(amount > 0 && amount >= auction.terms.minimumBidAmount && amount <= auction.terms.amount, "Invalid amount.");
         require(auction.terms.bidUnit <= 1 || (amount%auction.terms.bidUnit) == 0, "Invalid amount unit.");
-        require(value >= auction.terms.reservePricePerUnit*amount*2, "Insufficient earnest money");
         require(block.timestamp <= auction.terms.biddingDeadline, "Bidding has closed.");
 
         auction.bids.push(IBCEMusic.Bid({
             amountAndRevealed: amount
             , bidder: seller
-            , earnestMoney: value
             , bidHash: bidHash
         }));
         uint32 bidId = (uint32) (auction.bids.length-1);
-        auction.totalHeldBalance += value;
         
         return bidId;
     }
@@ -180,7 +177,7 @@ library BCEMusicAuction {
         require((bid.amountAndRevealed & 0x80) == 0, "Duplicate revealing");
         require(pricePerUnit >= auction.terms.reservePricePerUnit, "Cannot reveal an invalid price.");
         uint256 totalPrice = pricePerUnit*(bid.amountAndRevealed & 0x7f);
-        require(totalPrice <= value+bid.earnestMoney, "Not enough money to reveal.");
+        require(totalPrice <= value, "Not enough money to reveal.");
 
         bytes memory toHash = abi.encodePacked(pricePerUnit, nonce, bidder); //because all three are fixed length types, encodePacked would be safe
         bytes32 theHash = keccak256(toHash);
@@ -189,17 +186,11 @@ library BCEMusicAuction {
         AddedRevealedBid memory newlyAdded = _addRevealedBid(auction, bidId, pricePerUnit);
 
         bid.amountAndRevealed = (bid.amountAndRevealed | 0x80);
-        if (value+bid.earnestMoney > totalPrice) {
-            withdrawalAllowances[bidder] += value+bid.earnestMoney-totalPrice;
-            emit ClaimIncreased(bidder, value+bid.earnestMoney-totalPrice);
-            if (totalPrice < bid.earnestMoney) {
-                auction.totalHeldBalance -= bid.earnestMoney-totalPrice;
-            } else {
-                auction.totalHeldBalance += totalPrice-bid.earnestMoney;
-            }
-        } else {
-            auction.totalHeldBalance += value;
+        if (value > totalPrice) {
+            withdrawalAllowances[bidder] += value-totalPrice;
+            emit ClaimIncreased(bidder, value-totalPrice);
         }
+        auction.totalHeldBalance += totalPrice;
 
         _eliminateOutBiddedRevealedBids(auction, newlyAdded, withdrawalAllowances);
     }
