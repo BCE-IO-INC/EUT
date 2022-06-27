@@ -23,6 +23,7 @@
     "ganache": "^7.3.0",
     "hardhat": "^2.9.9",
     "lite-server": "^2.3.0",
+    "lodash": "^4.17.21",
     "web3": "^1.7.3",
     "web3-eth-contract": "^1.7.3"
   },
