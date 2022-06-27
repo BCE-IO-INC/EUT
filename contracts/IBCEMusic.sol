@@ -27,8 +27,8 @@ interface IBCEMusic {
 
     //In our current design, token id can only be 1 or 2, but it doesn't hurt to 
     //use the full uint256 since ERC1155 gives us uint256 for token ID anyway
-    event OfferCreated(uint256 tokenId, uint64 offerId);
-    event OfferFilled(uint256 tokenId, uint64 offerId);
+    event OfferCreated(uint256 tokenId, uint64 offerId, address seller);
+    event OfferFilled(uint256 tokenId, uint64 offerId, address buyer);
     event OfferWithdrawn(uint256 tokenId, uint64 offerId);
 
     function airDropInitialOwner(address receiver, uint256 tokenId, uint16 amount) external;
@@ -92,10 +92,10 @@ interface IBCEMusic {
         mapping (uint64 => Auction) auctions;
         mapping (address => uint16) auctionAmountBySeller;
     }
-    event AuctionCreated(uint256 tokenId, uint64 auctionId);
-    event BidPlacedForAuction(uint256 tokenId, uint64 auctionId, uint32 bidId);
-    event BidRevealedForAuction(uint256 tokenId, uint64 auctionId, uint32 bidId);
-    event AuctionFinalized(uint256 tokenId, uint64 auctionId);
+    event AuctionCreated(uint256 tokenId, uint64 auctionId, address seller);
+    event BidPlacedForAuction(uint256 tokenId, uint64 auctionId, uint32 bidId, address bidder);
+    event BidRevealedForAuction(uint256 tokenId, uint64 auctionId, uint32 bidId, address bidder);
+    event AuctionFinalized(uint256 tokenId, uint64 auctionId, address finalizer);
 
     //the returned value is auction ID
     function startAuction(uint256 tokenId, uint16 amount, uint16 minimumBidAmount, uint16 bidUnit, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint64);

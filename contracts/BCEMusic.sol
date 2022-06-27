@@ -57,7 +57,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             , amount
             , totalPrice
         );
-        emit OfferCreated(tokenId, offerId);
+        emit OfferCreated(tokenId, offerId, msg.sender);
 
         //console.log("Offer id is %s", offerId);
         return offerId;
@@ -93,7 +93,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             _withdrawalAllowances[msg.sender] += msg.value-theOfferTermsCopy.totalPrice;
             emit ClaimIncreased(msg.sender, msg.value-theOfferTermsCopy.totalPrice);
         }
-        emit OfferFilled(tokenId, offerId);
+        emit OfferFilled(tokenId, offerId, msg.sender);
     }
 
     function withdrawOffer(uint256 tokenId, uint64 offerId) external override {
@@ -120,7 +120,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
 
         uint64 auctionId = BCEMusicAuction.startAuction(msg.sender, auctions, amount, minimumBidAmount, bidUnit, reservePricePerUnit, biddingPeriodSeconds, revealingPeriodSeconds);
         
-        emit AuctionCreated(tokenId, auctionId);
+        emit AuctionCreated(tokenId, auctionId, msg.sender);
 
         return auctionId;
     }
@@ -133,7 +133,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             , bidHash
             );
         
-        emit BidPlacedForAuction(tokenId, auctionId, bidId);
+        emit BidPlacedForAuction(tokenId, auctionId, bidId, msg.sender);
         return bidId;
     }
     function revealBidOnAuction(uint256 tokenId, uint64 auctionId, uint32 bidId, uint256 pricePerUnit, bytes32 nonce) external payable override {
@@ -147,7 +147,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
             , nonce
             , _withdrawalAllowances
         );
-        emit BidRevealedForAuction(tokenId, auctionId, bidId);
+        emit BidRevealedForAuction(tokenId, auctionId, bidId, msg.sender);
     }
     function finalizeAuction(uint256 tokenId, uint64 auctionId) external override {
         BCEMusicAuction.AuctionResult memory auctionResult = BCEMusicAuction.finalizeAuction(_outstandingAuctions[tokenId], auctionId);
@@ -191,9 +191,9 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
                 _withdrawalAllowances[owner()] += totalReceipt;
                 emit ClaimIncreased(owner(), totalReceipt);
             }
-
-            emit AuctionFinalized(tokenId, auctionId);
         }
+        
+        emit AuctionFinalized(tokenId, auctionId, msg.sender);
     }
 
     function getAuctionById(uint256 tokenId, uint64 auctionId) external view override returns (AuctionTerms memory) {
