@@ -141,6 +141,8 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         BCEMusicAuction.revealBidOnAuction(
             msg.sender
             , msg.value
+            , tokenId 
+            , auctionId
             , auction
             , bidId
             , pricePerUnit
@@ -150,7 +152,7 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         emit BidRevealedForAuction(tokenId, auctionId, bidId, msg.sender);
     }
     function finalizeAuction(uint256 tokenId, uint64 auctionId) external override {
-        BCEMusicAuction.AuctionResult memory auctionResult = BCEMusicAuction.finalizeAuction(_outstandingAuctions[tokenId], auctionId);
+        BCEMusicAuction.AuctionResult memory auctionResult = BCEMusicAuction.finalizeAuction(tokenId, _outstandingAuctions[tokenId], auctionId);
         uint ownerPct = IBCEMusicSettings(_settingsAddr).ownerFeePercentForAuction();
         
         if (auctionResult.winners.length == 0) {

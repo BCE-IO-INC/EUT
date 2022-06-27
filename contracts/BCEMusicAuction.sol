@@ -128,10 +128,13 @@ library BCEMusicAuction {
 
     event ClaimIncreased(address claimant, uint256 increaseAmount);
 
+    event BidWonNotification(uint256 tokenId, uint64 auctionId, uint32 bidId, uint16 amount, uint256 pricePerUnit, address bidder);
+    event BidLostNotification(uint256 tokenId, uint64 auctionId, uint32 bidId, address bidder);
+
     //This function starts from the newly added revealed bid and eliminates
     //all out-bidded revealed bids (except at most one, to provide a reference
     //price for the next higher one)
-    function _eliminateOutBiddedRevealedBids(IBCEMusic.Auction storage auction, AddedRevealedBid memory newlyAdded, mapping (address => uint256) storage withdrawalAllowances) private {
+    function _eliminateOutBiddedRevealedBids(uint256 tokenId, uint64 auctionId, IBCEMusic.Auction storage auction, AddedRevealedBid memory newlyAdded, mapping (address => uint256) storage withdrawalAllowances) private {
         if (auction.revealedAmount <= auction.terms.amount) {
             return;
         }
@@ -157,6 +160,7 @@ library BCEMusicAuction {
                 auction.totalHeldBalance -= totalPrice;
                 withdrawalAllowances[auction.bids[auction.revealedBids[currentId].bidId].bidder] += totalPrice;
                 emit ClaimIncreased(auction.bids[auction.revealedBids[currentId].bidId].bidder, totalPrice);
+                emit BidLostNotification(tokenId, auctionId, auction.revealedBids[currentId].bidId, auction.bids[auction.revealedBids[currentId].bidId].bidder);
                 delete(auction.revealedBids[currentId]);
                 if (nextId == 0) {
                     break;
@@ -169,7 +173,7 @@ library BCEMusicAuction {
 
     //This function calls the two helper functions to first place the newly 
     //revealed bid, then eliminate the out-bidded ones
-    function revealBidOnAuction(address bidder, uint256 value, IBCEMusic.Auction storage auction, uint32 bidId, uint256 pricePerUnit, bytes32 nonce, mapping (address => uint256) storage withdrawalAllowances) external {
+    function revealBidOnAuction(address bidder, uint256 value, uint256 tokenId, uint64 auctionId, IBCEMusic.Auction storage auction, uint32 bidId, uint256 pricePerUnit, bytes32 nonce, mapping (address => uint256) storage withdrawalAllowances) external {
         require(auction.terms.amount > 0, "Invalid auction.");
         require(bidId <= auction.bids.length, "Invalid bid id.");
         require(block.timestamp > auction.terms.biddingDeadline, "Bidding has not yet closed.");
@@ -182,8 +186,7 @@ library BCEMusicAuction {
         uint256 totalPrice = pricePerUnit*(bid.amountAndRevealed & 0x7f);
         require(totalPrice <= value+bid.earnestMoney, "Not enough money to reveal.");
 
-        bytes memory toHash = abi.encodePacked(pricePerUnit, nonce, bidder); //because all three are fixed length types, encodePacked would be safe
-        bytes32 theHash = keccak256(toHash);
+        bytes32 theHash = keccak256(abi.encodePacked(pricePerUnit, nonce, bidder)); //because all three are fixed length types, encodePacked would be safe
         require(theHash == bid.bidHash, "Hash does not match.");
 
         AddedRevealedBid memory newlyAdded = _addRevealedBid(auction, bidId, pricePerUnit);
@@ -201,7 +204,7 @@ library BCEMusicAuction {
             auction.totalHeldBalance += value;
         }
 
-        _eliminateOutBiddedRevealedBids(auction, newlyAdded, withdrawalAllowances);
+        _eliminateOutBiddedRevealedBids(tokenId, auctionId, auction, newlyAdded, withdrawalAllowances);
     }
     //This function build an array of all potentional winners from the 
     //currently kept linked-list of revealed bids, and it deletes all
@@ -273,7 +276,7 @@ library BCEMusicAuction {
     //(but keeping a copy of the terms first). It then allocates the amounts
     //among the winners and calculates refunds.
 
-    function finalizeAuction(IBCEMusic.OutstandingAuctions storage auctions, uint64 auctionId) external returns (AuctionResult memory) {
+    function finalizeAuction(uint256 tokenId, IBCEMusic.OutstandingAuctions storage auctions, uint64 auctionId) external returns (AuctionResult memory) {
         IBCEMusic.Auction storage auction = auctions.auctions[auctionId];
         require(auction.terms.amount > 0, "Invalid auction.");
         require(block.timestamp > auction.terms.revealingDeadline, "Immature finalizing");
@@ -301,6 +304,11 @@ library BCEMusicAuction {
                     potentialWinners[ii].amount = auction.terms.amount-cumAmount;
                 }
                 potentialWinners[ii].refund = originalAmount*originalPricePerUnit-potentialWinners[ii].amount*potentialWinners[ii].pricePerUnit;
+                if (potentialWinners[ii].amount > 0) {
+                    emit BidWonNotification(tokenId, auctionId, potentialWinners[ii].bidId, potentialWinners[ii].amount, potentialWinners[ii].pricePerUnit, potentialWinners[ii].bidder);
+                } else {
+                    emit BidLostNotification(tokenId, auctionId, potentialWinners[ii].bidId, potentialWinners[ii].bidder);
+                }
                 cumAmount += potentialWinners[ii].amount;
             }
 
