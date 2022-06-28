@@ -186,7 +186,7 @@ library BCEMusicAuction {
         uint256 totalPrice = pricePerUnit*(bid.amountAndRevealed & 0x7f);
         require(totalPrice <= value+bid.earnestMoney, "Not enough money to reveal.");
 
-        bytes32 theHash = keccak256(abi.encodePacked(pricePerUnit, nonce, bidder)); //because all three are fixed length types, encodePacked would be safe
+        bytes32 theHash = keccak256(abi.encodePacked((pricePerUnit ^ uint256(nonce)), bidder)); //because all three are fixed length types, encodePacked would be safe
         require(theHash == bid.bidHash, "Hash does not match.");
 
         AddedRevealedBid memory newlyAdded = _addRevealedBid(auction, bidId, pricePerUnit);

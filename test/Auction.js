@@ -14,16 +14,24 @@ function asUint256ByteArray(x) {
 function asByte32String(x) {
     return ethers.utils.hexlify(asUint256ByteArray(x));
 }
+function xorUint256ByteArray(x, y) {
+    var ret = new Uint8Array(32);
+    for (var ii=0; ii<32; ++ii) {
+        ret[ii] = x[ii] ^ y[ii];
+    }
+    return ret;
+}
 function bidHash(price, nonce, address) {
     const y = [
-        asUint256ByteArray(price)
-        , asUint256ByteArray(nonce)
+        xorUint256ByteArray(
+            asUint256ByteArray(price)
+            , asUint256ByteArray(nonce)
+        )
         , ethers.utils.arrayify(ethers.BigNumber.from(address))
     ];
-    var arr = new Uint8Array(y[0].length+y[1].length+y[2].length);
+    var arr = new Uint8Array(y[0].length+y[1].length);
     arr.set(y[0]);
     arr.set(y[1], y[0].length);
-    arr.set(y[2], y[0].length+y[1].length);
     return ethers.utils.keccak256(arr);
 }
 
