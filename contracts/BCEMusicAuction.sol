@@ -63,67 +63,86 @@ library BCEMusicAuction {
     //An revealed bid is smaller if either (1) its per-unit price is lower or
     //(2) its per-unit price is the same as the other one, but its bid id is
     //higher (i.e. it is later)
-    function _compareBids(IBCEMusic.RevealedBid storage a, IBCEMusic.RevealedBid storage b) private view returns (bool) {
+    function _compareBids(IBCEMusic.RevealedBid storage a, IBCEMusic.RevealedBid storage b) private view returns (int8) {
         if (a.pricePerUnit < b.pricePerUnit) {
-            return true;
+            return -1;
         }
-        if (a.pricePerUnit == b.pricePerUnit && a.bidId > b.bidId) {
-            return true;
+        if (a.pricePerUnit > b.pricePerUnit) {
+            return 1;
         }
-        return false;
+        if (a.bidId > b.bidId) {
+            return -1;
+        }
+        if (a.bidId < b.bidId) {
+            return 1;
+        }
+        return 0;
     }
-    struct AddedRevealedBid {
-        uint32 revealedBidId;
-        uint16 cumAmountInFront;
+    function _zig(IBCEMusic.Auction storage auction, uint32 revealedBidId) private {
+        uint32 l = auction.revealedBids[revealedBidId].left;
+        auction.revealedBids[revealedBidId].left = auction.revealedBids[l].right;
+        auction.revealedBids[l].right = revealedBidId;
+        if (auction.revealedBidRoot == revealedBidId) {
+            auction.revealedBidRoot = l;
+        }
+    }
+    function _zag(IBCEMusic.Auction storage auction, uint32 revealedBidId) private {
+        uint32 r = auction.revealedBids[revealedBidId].right;
+        auction.revealedBids[revealedBidId].right = auction.revealedBids[r].left;
+        auction.revealedBids[r].left = revealedBidId;
+        if (auction.revealedBidRoot == revealedBidId) {
+            auction.revealedBidRoot = r;
+        }
+    }
+    //at the call point, we assume that the new node has been created already
+    function _insertRevealedBid(IBCEMusic.Auction storage auction, uint32 newId) private {
+        if (auction.revealedBidRoot == 0) {
+            auction.revealedBidRoot = newId;
+            return;
+        }
+        uint32 current = auction.revealedBidRoot;
+        while (current != 0) {
+            int8 c = _compareBids(auction.revealedBids[newId], auction.revealedBids[current]);
+            if (c < 0) {
+                if (auction.revealedBids[current].left == 0) {
+                    auction.revealedBids[current].left = newId;
+                    if (auction.revealedBids[current].blockHash < auction.revealedBids[newId].blockHash) {
+                        _zig(auction, current);
+                    }
+                    return;
+                } else {
+                    current = auction.revealedBids[current].left;
+                }
+            } else {
+                if (auction.revealedBids[current].right == 0) {
+                    auction.revealedBids[current].right = newId;
+                    if (auction.revealedBids[current].blockHash < auction.revealedBids[newId].blockHash) {
+                        _zag(auction, current);
+                    }
+                    return;
+                } else {
+                    current = auction.revealedBids[current].right;
+                }
+            }
+        }
     }
     //This function adds revealed bid to the single-linked list and updates statistics
     //The returned value also includes cumulative amount of all revealed bids that are
     //higher than the newly added one
-    function _addRevealedBid(IBCEMusic.Auction storage auction, uint32 bidId, uint256 pricePerUnit) private returns (AddedRevealedBid memory) {
+    function _addRevealedBid(IBCEMusic.Auction storage auction, uint32 bidId, uint256 pricePerUnit) private {
         ++auction.revealedBidIdCounter;
         uint32 revealedBidId = auction.revealedBidIdCounter;
         auction.revealedBids[revealedBidId] = IBCEMusic.RevealedBid({
-            bidId: bidId 
-            , nextRevealedBidId: 0
-            , pricePerUnit: pricePerUnit
+            bidId : bidId
+            , left : 0
+            , right : 0
+            , pricePerUnit : pricePerUnit 
+            , blockHash : uint256(blockhash(block.number-1))
         });
         auction.revealedAmount += (auction.bids[bidId].amountAndRevealed & 0x7f);
         auction.totalInPlayRevealedBidCount += 1;
-        AddedRevealedBid memory ret = AddedRevealedBid({
-            revealedBidId: revealedBidId
-            , cumAmountInFront: 0
-        });
-        
-        IBCEMusic.RevealedBid storage thisRevealedBid = auction.revealedBids[revealedBidId] ;
 
-        if (auction.firstRevealedBidId == 0) {
-            auction.firstRevealedBidId = revealedBidId;
-            return ret;
-        }
-        if (_compareBids(auction.revealedBids[auction.firstRevealedBidId], thisRevealedBid)) {
-            thisRevealedBid.nextRevealedBidId = auction.firstRevealedBidId;
-            auction.firstRevealedBidId = revealedBidId;
-            return ret;
-        }
-        uint32 prevId = auction.firstRevealedBidId;
-        uint32 nextId = auction.revealedBids[prevId].nextRevealedBidId;
-        while (true) {
-            ret.cumAmountInFront += (auction.bids[auction.revealedBids[prevId].bidId].amountAndRevealed & 0x7f);
-            if (nextId == 0) {
-                auction.revealedBids[prevId].nextRevealedBidId = revealedBidId;
-                break;
-            } else if (_compareBids(auction.revealedBids[nextId], thisRevealedBid)) {
-                thisRevealedBid.nextRevealedBidId = nextId;
-                auction.revealedBids[prevId].nextRevealedBidId = revealedBidId;
-                break;
-            } else {
-                prevId = nextId;
-                nextId = auction.revealedBids[prevId].nextRevealedBidId;
-            }
-        }
-        //console.log("inserted %s %s", ret.revealedBidId, ret.cumAmountInFront);
-        //console.log("the info %s %s", auction.revealedBids[ret.revealedBidId].bidId, auction.revealedBids[ret.revealedBidId].pricePerUnit);
-        return ret;
+        _insertRevealedBid(auction, revealedBidId);
     }
 
     event ClaimIncreased(address claimant, uint256 increaseAmount);
@@ -134,40 +153,48 @@ library BCEMusicAuction {
     //This function starts from the newly added revealed bid and eliminates
     //all out-bidded revealed bids (except at most one, to provide a reference
     //price for the next higher one)
-    function _eliminateOutBiddedRevealedBids(uint256 tokenId, uint64 auctionId, IBCEMusic.Auction storage auction, AddedRevealedBid memory newlyAdded, mapping (address => uint256) storage withdrawalAllowances) private {
+    function _findMin(IBCEMusic.Auction storage auction) private view returns (uint32) {
+        uint32 currentParent = 0;
+        uint32 current = auction.revealedBidRoot;
+        while (current != 0) {
+            if (auction.revealedBids[current].left == 0) {
+                return currentParent;
+            } else {
+                currentParent = current;
+                current = auction.revealedBids[current].left;
+            }
+        }
+        return 0;
+    }
+    function _eliminateOutBiddedRevealedBids(uint256 tokenId, uint64 auctionId, IBCEMusic.Auction storage auction, mapping (address => uint256) storage withdrawalAllowances) private {
         if (auction.revealedAmount <= auction.terms.amount) {
             return;
         }
-        uint32 currentId = newlyAdded.revealedBidId;
-        uint32 nextId = auction.revealedBids[currentId].nextRevealedBidId;
-        uint16 cumAmount = newlyAdded.cumAmountInFront;
         while (true) {
-            //console.log("Checking %s %s %s", currentId, nextId, cumAmount);
-            if (cumAmount <= auction.terms.amount) {
-                cumAmount += (auction.bids[auction.revealedBids[currentId].bidId].amountAndRevealed & 0x7f);
-                if (cumAmount > auction.terms.amount) {
-                    auction.revealedBids[currentId].nextRevealedBidId = 0;
-                }
-                if (nextId == 0) {
-                    break;
-                }
-                currentId = nextId;
-                nextId = auction.revealedBids[currentId].nextRevealedBidId;
+            uint32 idxParent = _findMin(auction);
+            uint32 idx = 0;
+            if (idxParent == 0) {
+                idx = auction.revealedBidRoot;
             } else {
-                auction.revealedAmount -= (auction.bids[auction.revealedBids[currentId].bidId].amountAndRevealed & 0x7f);
-                auction.totalInPlayRevealedBidCount -= 1;
-                uint256 totalPrice = auction.revealedBids[currentId].pricePerUnit*(auction.bids[auction.revealedBids[currentId].bidId].amountAndRevealed & 0x7f);
-                auction.totalHeldBalance -= totalPrice;
-                withdrawalAllowances[auction.bids[auction.revealedBids[currentId].bidId].bidder] += totalPrice;
-                emit ClaimIncreased(auction.bids[auction.revealedBids[currentId].bidId].bidder, totalPrice);
-                emit BidLostNotification(tokenId, auctionId, auction.revealedBids[currentId].bidId, auction.bids[auction.revealedBids[currentId].bidId].bidder);
-                delete(auction.revealedBids[currentId]);
-                if (nextId == 0) {
-                    break;
-                }
-                currentId = nextId;
-                nextId = auction.revealedBids[currentId].nextRevealedBidId;
+                idx = auction.revealedBids[idxParent].left;
             }
+            uint16 sz = (auction.bids[auction.revealedBids[idx].bidId].amountAndRevealed & 0x7f);
+            if (auction.revealedAmount <= sz+auction.terms.amount) {
+                break;
+            }
+            auction.revealedAmount -= sz;
+            auction.totalInPlayRevealedBidCount -= 1;
+            uint256 totalPrice = auction.revealedBids[idx].pricePerUnit*sz;
+            auction.totalHeldBalance -= totalPrice;
+            withdrawalAllowances[auction.bids[auction.revealedBids[idx].bidId].bidder] += totalPrice;
+            emit ClaimIncreased(auction.bids[auction.revealedBids[idx].bidId].bidder, totalPrice);
+            emit BidLostNotification(tokenId, auctionId, auction.revealedBids[idx].bidId, auction.bids[auction.revealedBids[idx].bidId].bidder);
+            if (idx == auction.revealedBidRoot) {
+                auction.revealedBidRoot = auction.revealedBids[idx].right;
+            } else {
+                auction.revealedBids[idxParent].left = auction.revealedBids[idx].right;
+            }
+            delete(auction.revealedBids[idx]);
         }
     }
 
@@ -189,7 +216,7 @@ library BCEMusicAuction {
         bytes32 theHash = keccak256(abi.encodePacked((pricePerUnit ^ uint256(nonce)), bidder)); //because all three are fixed length types, encodePacked would be safe
         require(theHash == bid.bidHash, "Hash does not match.");
 
-        AddedRevealedBid memory newlyAdded = _addRevealedBid(auction, bidId, pricePerUnit);
+        _addRevealedBid(auction, bidId, pricePerUnit);
 
         bid.amountAndRevealed = (bid.amountAndRevealed | 0x80);
         if (value+bid.earnestMoney > totalPrice) {
@@ -204,37 +231,74 @@ library BCEMusicAuction {
             auction.totalHeldBalance += value;
         }
 
-        _eliminateOutBiddedRevealedBids(tokenId, auctionId, auction, newlyAdded, withdrawalAllowances);
+        _eliminateOutBiddedRevealedBids(tokenId, auctionId, auction, withdrawalAllowances);
     }
     //This function build an array of all potentional winners from the 
     //currently kept linked-list of revealed bids, and it deletes all
     //the revealed bids since they are no longer needed
     function _buildPotentialWinners(IBCEMusic.Auction storage auction) private returns (IBCEMusic.AuctionWinner[] memory) {
         IBCEMusic.AuctionWinner[] memory potentialWinners = new IBCEMusic.AuctionWinner[](auction.totalInPlayRevealedBidCount);
-        if (auction.firstRevealedBidId > 0) {
-            uint32 ii = 0;
-            uint32 currentId = auction.firstRevealedBidId;
-            IBCEMusic.RevealedBid storage r = auction.revealedBids[currentId];
-            uint32 nextId = r.nextRevealedBidId;
-            while (true) {
+        uint32[] memory stack = new uint32[](auction.totalInPlayRevealedBidCount);
+        stack[0] = auction.revealedBidRoot;
+        uint32 stackSize = 1;
+        uint32 ii = 0;
+        while (stackSize > 0) {
+            uint32 r = auction.revealedBids[stack[stackSize-1]].right;
+            if (r == 0) {
+                //handle top
                 potentialWinners[ii] = IBCEMusic.AuctionWinner({
-                    amount: (auction.bids[r.bidId].amountAndRevealed & 0x7f)
-                    , bidId : r.bidId
-                    , bidder : auction.bids[r.bidId].bidder
-                    , pricePerUnit: r.pricePerUnit
+                    amount: (auction.bids[auction.revealedBids[stack[stackSize-1]].bidId].amountAndRevealed & 0x7f)
+                    , bidId : auction.revealedBids[stack[stackSize-1]].bidId
+                    , bidder : auction.bids[auction.revealedBids[stack[stackSize-1]].bidId].bidder
+                    , pricePerUnit: auction.revealedBids[stack[stackSize-1]].pricePerUnit
                     , refund: 0
                 });
                 ++ii;
-                delete(auction.revealedBids[currentId]);
-                if (nextId == 0) {
-                    break;
+                uint32 l = auction.revealedBids[stack[stackSize-1]].left;
+                if (l == 0) {
+                    stack[stackSize-1] = 0;
+                    --stackSize;
+                } else {
+                    stack[stackSize-1] = l;
                 }
-                currentId = nextId;
-                r = auction.revealedBids[currentId];
-                nextId = r.nextRevealedBidId;
+            } else {
+                stack[stackSize] = r;
+                ++stackSize;
             }
-            auction.firstRevealedBidId = 0;
         }
+
+        uint32 head = auction.revealedBidRoot;
+        stack[0] = head;
+        stackSize = 1;
+        while (stackSize > 0) {
+            uint32 next = stack[stackSize-1];
+            if (
+                auction.revealedBids[next].right == head
+                    ||
+                auction.revealedBids[next].left == head
+                    ||
+                (
+                    auction.revealedBids[next].right == 0
+                        &&
+                    auction.revealedBids[next].left == 0
+                )
+            ) {
+                stack[stackSize-1] = 0;
+                --stackSize;
+                delete(auction.revealedBids[next]);
+                head = next;
+            } else {
+                if (auction.revealedBids[next].right != 0) {
+                    stack[stackSize] = auction.revealedBids[next].right;
+                    ++stackSize;
+                } 
+                if (auction.revealedBids[next].left != 0) {
+                    stack[stackSize] = auction.revealedBids[next].left;
+                    ++stackSize;
+                } 
+            }
+        }
+        
         return potentialWinners;
     }
     //This function removes an auction from the double-linked list
@@ -281,7 +345,7 @@ library BCEMusicAuction {
         require(auction.terms.amount > 0, "Invalid auction.");
         require(block.timestamp > auction.terms.revealingDeadline, "Immature finalizing");
 
-        if (auction.totalInPlayRevealedBidCount == 0) {
+        if (auction.revealedBidRoot == 0 || auction.totalInPlayRevealedBidCount == 0) {
             uint256 totalReceipt = auction.totalHeldBalance;
             IBCEMusic.AuctionTerms memory terms = _removeAuction(auctions, auctionId, auction);
             return AuctionResult({

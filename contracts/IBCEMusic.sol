@@ -47,10 +47,13 @@ interface IBCEMusic {
     }
     //since bids only live for one auction, uint32 is more than enough
     //for bid IDs and revealed bid IDs
+    //This is a binary tree structure, blockHash is used for treap purposes
     struct RevealedBid {
         uint32 bidId;
-        uint32 nextRevealedBidId;
+        uint32 left;
+        uint32 right;
         uint256 pricePerUnit;
+        uint256 blockHash;
     }
     struct AuctionTerms {
         uint16 amount;
@@ -65,7 +68,7 @@ interface IBCEMusic {
     struct Auction {
         uint16 totalInPlayRevealedBidCount; //since revealed bids may be eliminated when they are outbidded, we need to maintain a separate counter for in-play ones. And this counter cannot exceed 501 anyway
         uint16 revealedAmount;
-        uint32 firstRevealedBidId;
+        uint32 revealedBidRoot;
         uint32 revealedBidIdCounter;
         uint64 nextAuction;
         uint64 prevAuction;
