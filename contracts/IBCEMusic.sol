@@ -52,8 +52,8 @@ interface IBCEMusic {
         uint32 bidId;
         uint32 left;
         uint32 right;
+        uint160 blockHash;
         uint256 pricePerUnit;
-        uint256 blockHash;
     }
     struct AuctionTerms {
         uint16 amount;

@@ -154,8 +154,8 @@ library BCEMusicAuction {
             bidId : bidId
             , left : 0
             , right : 0
+            , blockHash : uint160(uint256(blockhash(block.number-1)))
             , pricePerUnit : pricePerUnit 
-            , blockHash : uint256(blockhash(block.number-1))
         });
         auction.revealedAmount += (auction.bids[bidId].amountAndRevealed & 0x7f);
         auction.totalInPlayRevealedBidCount += 1;
