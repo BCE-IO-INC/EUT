@@ -189,33 +189,40 @@ library BCEMusicAuction {
         if (auction.revealedAmount <= auction.terms.amount) {
             return;
         }
-        while (true) {
-            uint32 idxParent = _findMin(auction);
-            uint32 idx = 0;
-            if (idxParent == 0) {
-                idx = auction.revealedBidRoot;
-            } else {
-                idx = auction.revealedBids[idxParent].left;
-            }
-            uint32 bidId = auction.revealedBids[idx].bidId;
-            uint16 sz = (auction.bids[bidId].amountAndRevealed & 0x7f);
-            if (auction.revealedAmount <= sz+auction.terms.amount) {
-                break;
-            }
-            auction.revealedAmount -= sz;
-            auction.totalInPlayRevealedBidCount -= 1;
-            uint256 totalPrice = auction.revealedBids[idx].pricePerUnit*sz;
-            auction.totalHeldBalance -= totalPrice;
-            withdrawalAllowances[auction.bids[bidId].bidder] += totalPrice;
-            emit ClaimIncreased(auction.bids[bidId].bidder, totalPrice);
-            emit BidLostNotification(tokenId, auctionId, bidId, auction.bids[bidId].bidder);
-            if (idx == auction.revealedBidRoot) {
-                auction.revealedBidRoot = auction.revealedBids[idx].right;
-            } else {
-                auction.revealedBids[idxParent].left = auction.revealedBids[idx].right;
-            }
-            delete(auction.revealedBids[idx]);
+        //In this version, we at most eliminate one outbidded bid.
+        //The reason is that, for each outbidded one, we need to somehow do a traversal
+        //to find it. In the rare case where a huge new bid elimiates a big number of
+        //outbidded ones, the gas consumption would be high, and this may discourage the
+        //bidder of the huge bid from revealing it.
+        //Now if we eliminate at most one, then the gas consumption for revelation would be
+        //controllable, and also the final bid count will still not exceed the possible
+        //high limit (equal to tokens in auction plus one), so the finalizing step would
+        //still be handlable in gas.
+        uint32 idxParent = _findMin(auction);
+        uint32 idx = 0;
+        if (idxParent == 0) {
+            idx = auction.revealedBidRoot;
+        } else {
+            idx = auction.revealedBids[idxParent].left;
         }
+        uint32 bidId = auction.revealedBids[idx].bidId;
+        uint16 sz = (auction.bids[bidId].amountAndRevealed & 0x7f);
+        if (auction.revealedAmount <= sz+auction.terms.amount) {
+            return;
+        }
+        auction.revealedAmount -= sz;
+        auction.totalInPlayRevealedBidCount -= 1;
+        uint256 totalPrice = auction.revealedBids[idx].pricePerUnit*sz;
+        auction.totalHeldBalance -= totalPrice;
+        withdrawalAllowances[auction.bids[bidId].bidder] += totalPrice;
+        emit ClaimIncreased(auction.bids[bidId].bidder, totalPrice);
+        emit BidLostNotification(tokenId, auctionId, bidId, auction.bids[bidId].bidder);
+        if (idx == auction.revealedBidRoot) {
+            auction.revealedBidRoot = auction.revealedBids[idx].right;
+        } else {
+            auction.revealedBids[idxParent].left = auction.revealedBids[idx].right;
+        }
+        delete(auction.revealedBids[idx]);
     }
 
     //This function calls the two helper functions to first place the newly 
