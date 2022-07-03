@@ -267,15 +267,17 @@ library BCEMusicAuction {
                 current = auction.revealedBids[current].right;
             }
             if (stackSize > 0) {
+                current = stack[stackSize-1];
+                uint32 bidId = auction.revealedBids[current].bidId;
                 potentialWinners[ii] = IBCEMusic.AuctionWinner({
-                    amount: (auction.bids[auction.revealedBids[stack[stackSize-1]].bidId].amountAndRevealed & 0x7f)
-                    , bidId : auction.revealedBids[stack[stackSize-1]].bidId
-                    , bidder : auction.bids[auction.revealedBids[stack[stackSize-1]].bidId].bidder
-                    , pricePerUnit: auction.revealedBids[stack[stackSize-1]].pricePerUnit
+                    amount: (auction.bids[bidId].amountAndRevealed & 0x7f)
+                    , bidId : bidId
+                    , bidder : auction.bids[bidId].bidder
+                    , pricePerUnit: auction.revealedBids[current].pricePerUnit
                     , refund: 0
                 });
                 ++ii;
-                current = auction.revealedBids[stack[stackSize-1]].left;
+                current = auction.revealedBids[current].left;
                 delete(auction.revealedBids[stack[stackSize-1]]);
                 stack[stackSize-1] = 0;
                 --stackSize;
