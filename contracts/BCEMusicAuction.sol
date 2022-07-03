@@ -175,11 +175,12 @@ library BCEMusicAuction {
         uint32 currentParent = 0;
         uint32 current = auction.revealedBidRoot;
         while (current != 0) {
-            if (auction.revealedBids[current].left == 0) {
+            uint32 l = auction.revealedBids[current].left;
+            if (l == 0) {
                 return currentParent;
             } else {
                 currentParent = current;
-                current = auction.revealedBids[current].left;
+                current = l;
             }
         }
         return 0;
@@ -196,7 +197,8 @@ library BCEMusicAuction {
             } else {
                 idx = auction.revealedBids[idxParent].left;
             }
-            uint16 sz = (auction.bids[auction.revealedBids[idx].bidId].amountAndRevealed & 0x7f);
+            uint32 bidId = auction.revealedBids[idx].bidId;
+            uint16 sz = (auction.bids[bidId].amountAndRevealed & 0x7f);
             if (auction.revealedAmount <= sz+auction.terms.amount) {
                 break;
             }
@@ -204,9 +206,9 @@ library BCEMusicAuction {
             auction.totalInPlayRevealedBidCount -= 1;
             uint256 totalPrice = auction.revealedBids[idx].pricePerUnit*sz;
             auction.totalHeldBalance -= totalPrice;
-            withdrawalAllowances[auction.bids[auction.revealedBids[idx].bidId].bidder] += totalPrice;
-            emit ClaimIncreased(auction.bids[auction.revealedBids[idx].bidId].bidder, totalPrice);
-            emit BidLostNotification(tokenId, auctionId, auction.revealedBids[idx].bidId, auction.bids[auction.revealedBids[idx].bidId].bidder);
+            withdrawalAllowances[auction.bids[bidId].bidder] += totalPrice;
+            emit ClaimIncreased(auction.bids[bidId].bidder, totalPrice);
+            emit BidLostNotification(tokenId, auctionId, bidId, auction.bids[bidId].bidder);
             if (idx == auction.revealedBidRoot) {
                 auction.revealedBidRoot = auction.revealedBids[idx].right;
             } else {
