@@ -54,7 +54,7 @@ describe("Auction test", () => {
         });
         const bceMusic = await BCEMusic.deploy("abc", bceMusicSettings.address);
 
-        const auctionTx = await bceMusic.startAuction(2, 100, 0, 0, 10, 120, 120);
+        const auctionTx = await bceMusic.startAuction(2, 100, 0, 0, 10, 120, 120, 3);
         const auctionRes = await auctionTx.wait();
         const auctionCreatedEvent = auctionRes.events.find(event => event.event === 'AuctionCreated');
         expect(auctionCreatedEvent.args.tokenId.toNumber() == 2 && auctionCreatedEvent.args.auctionId.toNumber() == 1);
@@ -130,7 +130,7 @@ describe("Auction test", () => {
         });
         const bceMusic = await BCEMusic.deploy("abc", bceMusicSettings.address);
 
-        const auctionTx = await bceMusic.startAuction(2, 499, 0, 0, 10, 3000, 3000);
+        const auctionTx = await bceMusic.startAuction(2, 499, 0, 0, 10, 3000, 3000, 1);
         const auctionRes = await auctionTx.wait();
         const auctionCreatedEvent = auctionRes.events.find(event => event.event === 'AuctionCreated');
         expect(auctionCreatedEvent.args.tokenId.toNumber() == 2 && auctionCreatedEvent.args.auctionId.toNumber() == 1);
@@ -186,6 +186,7 @@ describe("Auction test", () => {
         console.log(`\t\tAuction ${finalizeEvent.args.auctionId} finalized, gas used=${finalizeRes.gasUsed.toNumber()}`);
     });
     */
+    /*
     it("Music auction (medium pressure test)", async () => {
         const signers = await ethers.getSigners();
         const owner = signers[0];
@@ -204,7 +205,7 @@ describe("Auction test", () => {
         });
         const bceMusic = await BCEMusic.deploy("abc", bceMusicSettings.address);
 
-        const auctionTx = await bceMusic.startAuction(2, 100, 0, 0, 10, 3000, 3000);
+        const auctionTx = await bceMusic.startAuction(2, 100, 0, 0, 10, 3000, 3000, 1);
         const auctionRes = await auctionTx.wait();
         const auctionCreatedEvent = auctionRes.events.find(event => event.event === 'AuctionCreated');
         expect(auctionCreatedEvent.args.tokenId.toNumber() == 2 && auctionCreatedEvent.args.auctionId.toNumber() == 1);
@@ -259,4 +260,5 @@ describe("Auction test", () => {
         var finalizeEvent = finalizeRes.events.find(event => event.event === 'AuctionFinalized');
         console.log(`\t\tAuction ${finalizeEvent.args.auctionId} finalized, gas used=${finalizeRes.gasUsed.toNumber()}`);
     });
+    */
 });

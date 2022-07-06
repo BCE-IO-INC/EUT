@@ -112,13 +112,13 @@ contract BCEMusic is ERC1155, Ownable, ReentrancyGuard, IBCEMusic {
         return BCEMusicOffer.getAllOutstandingOffers(_outstandingOffers[tokenId]);
     }
 
-    function startAuction(uint256 tokenId, uint16 amount, uint16 minimumBidAmount, uint16 bidUnit, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external override returns (uint64) {
+    function startAuction(uint256 tokenId, uint16 amount, uint16 minimumBidAmount, uint16 bidUnit, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds, AuctionPricingPolicy pricingPolicy) external override returns (uint64) {
         uint balance = balanceOf(msg.sender, tokenId);
         OutstandingAuctions storage auctions = _outstandingAuctions[tokenId];
         uint requiredAmount = amount+auctions.auctionAmountBySeller[msg.sender]+_outstandingOffers[tokenId].offerAmountBySeller[msg.sender];
         require (balance >= requiredAmount, "BA");
 
-        uint64 auctionId = BCEMusicAuction.startAuction(msg.sender, auctions, amount, minimumBidAmount, bidUnit, reservePricePerUnit, biddingPeriodSeconds, revealingPeriodSeconds);
+        uint64 auctionId = BCEMusicAuction.startAuction(msg.sender, auctions, amount, minimumBidAmount, bidUnit, reservePricePerUnit, biddingPeriodSeconds, revealingPeriodSeconds, uint8(pricingPolicy));
         
         emit AuctionCreated(tokenId, auctionId, msg.sender);
 

@@ -8,7 +8,7 @@ library BCEMusicAuction {
     uint public constant AMOUNT_UPPER_LIMIT = 500;
 
     //This function simply adds an auction to the double-linked list and returns its ID
-    function startAuction(address seller, IBCEMusic.OutstandingAuctions storage auctions, uint16 amount, uint16 minimumBidAmount, uint16 bidUnit, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds) external returns (uint64) {
+    function startAuction(address seller, IBCEMusic.OutstandingAuctions storage auctions, uint16 amount, uint16 minimumBidAmount, uint16 bidUnit, uint256 reservePricePerUnit, uint256 biddingPeriodSeconds, uint256 revealingPeriodSeconds, uint8 pricingPolicy) external returns (uint64) {
         require(amount > 0 && amount < AMOUNT_UPPER_LIMIT, "Invalid amount.");
         require(minimumBidAmount <= amount, "Invalid minimum bid amount.");
         require(bidUnit <= amount, "Invalid bid unit.");
@@ -18,7 +18,8 @@ library BCEMusicAuction {
         uint64 auctionId = auctions.auctionIdCounter;
         IBCEMusic.Auction storage auction = auctions.auctions[auctionId];
         auction.terms = IBCEMusic.AuctionTerms({
-            amount: amount
+            pricingPolicy: pricingPolicy
+            , amount: amount
             , minimumBidAmount : minimumBidAmount 
             , bidUnit : bidUnit
             , seller: seller 
@@ -347,26 +348,87 @@ library BCEMusicAuction {
                 , terms: terms
             });
         } else {
+            uint8 pricingPolicy = auction.terms.pricingPolicy;
             IBCEMusic.AuctionWinner[] memory potentialWinners = _buildPotentialWinners(auction);
             uint16 cumAmount = 0;
-            for (uint ii=0; ii<potentialWinners.length; ++ii) {
-                uint256 originalPricePerUnit = potentialWinners[ii].pricePerUnit;
-                uint16 originalAmount = potentialWinners[ii].amount;
-                if (ii+1 < potentialWinners.length) {
-                    potentialWinners[ii].pricePerUnit = potentialWinners[ii+1].pricePerUnit;
-                } else {
-                    potentialWinners[ii].pricePerUnit = auction.terms.reservePricePerUnit;
+            uint16 fullAmount = auction.terms.amount;
+            if (pricingPolicy == uint8(IBCEMusic.AuctionPricingPolicy.FirstPrice) || pricingPolicy == uint8(IBCEMusic.AuctionPricingPolicy.NextSecondPrice)) {
+                for (uint ii=0; ii<potentialWinners.length; ++ii) {
+                    uint256 originalPricePerUnit = potentialWinners[ii].pricePerUnit;
+                    uint16 originalAmount = potentialWinners[ii].amount;
+                    if (pricingPolicy == uint8(IBCEMusic.AuctionPricingPolicy.NextSecondPrice)) {
+                        if (ii+1 < potentialWinners.length) {
+                            potentialWinners[ii].pricePerUnit = potentialWinners[ii+1].pricePerUnit;
+                        } else {
+                            potentialWinners[ii].pricePerUnit = auction.terms.reservePricePerUnit;
+                        }
+                    }
+                    if (cumAmount + potentialWinners[ii].amount >= fullAmount) {
+                        potentialWinners[ii].amount = fullAmount-cumAmount;
+                    }
+                    potentialWinners[ii].refund = originalAmount*originalPricePerUnit-potentialWinners[ii].amount*potentialWinners[ii].pricePerUnit;
+                    if (potentialWinners[ii].amount > 0) {
+                        emit BidWonNotification(tokenId, auctionId, potentialWinners[ii].bidId, potentialWinners[ii].amount, potentialWinners[ii].pricePerUnit, potentialWinners[ii].bidder);
+                    } else {
+                        emit BidLostNotification(tokenId, auctionId, potentialWinners[ii].bidId, potentialWinners[ii].bidder);
+                    }
+                    cumAmount += potentialWinners[ii].amount;
                 }
-                if (cumAmount + potentialWinners[ii].amount >= auction.terms.amount) {
-                    potentialWinners[ii].amount = auction.terms.amount-cumAmount;
+            } else {
+                uint256 p = auction.terms.reservePricePerUnit;
+                uint256 max = 0;
+                for (uint ii=0; ii<potentialWinners.length; ++ii) {
+                    cumAmount += potentialWinners[ii].amount;
+                    if (pricingPolicy == uint8(IBCEMusic.AuctionPricingPolicy.FullAmountSecondPrice)) {
+                        if (cumAmount >= fullAmount) {
+                            if (ii+1 < potentialWinners.length) {
+                                p = potentialWinners[ii+1].pricePerUnit;
+                            }
+                            break;
+                        }
+                    } else {
+                        if (cumAmount >= fullAmount) {
+                            if (ii+1 < potentialWinners.length) {
+                                if (potentialWinners[ii+1].pricePerUnit*fullAmount > max) {
+                                    p = potentialWinners[ii+1].pricePerUnit;
+                                }
+                            } else {
+                                if (auction.terms.reservePricePerUnit*fullAmount > max) {
+                                    p = auction.terms.reservePricePerUnit;
+                                }
+                            }
+                            break;
+                        } else {
+                            if (ii+1 < potentialWinners.length) {
+                                if (potentialWinners[ii+1].pricePerUnit*cumAmount > max) {
+                                    p = potentialWinners[ii+1].pricePerUnit;
+                                    max = p*cumAmount;
+                                }
+                            } else {
+                                if (auction.terms.reservePricePerUnit*cumAmount > max) {
+                                    p = auction.terms.reservePricePerUnit;
+                                    max = p*cumAmount;
+                                }
+                            }
+                        }
+                    }
                 }
-                potentialWinners[ii].refund = originalAmount*originalPricePerUnit-potentialWinners[ii].amount*potentialWinners[ii].pricePerUnit;
-                if (potentialWinners[ii].amount > 0) {
-                    emit BidWonNotification(tokenId, auctionId, potentialWinners[ii].bidId, potentialWinners[ii].amount, potentialWinners[ii].pricePerUnit, potentialWinners[ii].bidder);
-                } else {
-                    emit BidLostNotification(tokenId, auctionId, potentialWinners[ii].bidId, potentialWinners[ii].bidder);
+                cumAmount = 0;
+                for (uint ii=0; ii<potentialWinners.length; ++ii) {
+                    uint256 originalPricePerUnit = potentialWinners[ii].pricePerUnit;
+                    uint16 originalAmount = potentialWinners[ii].amount;
+                    potentialWinners[ii].pricePerUnit = p;
+                    if (cumAmount + potentialWinners[ii].amount >= fullAmount) {
+                        potentialWinners[ii].amount = fullAmount-cumAmount;
+                    }
+                    potentialWinners[ii].refund = originalAmount*originalPricePerUnit-potentialWinners[ii].amount*potentialWinners[ii].pricePerUnit;
+                    if (potentialWinners[ii].amount > 0) {
+                        emit BidWonNotification(tokenId, auctionId, potentialWinners[ii].bidId, potentialWinners[ii].amount, potentialWinners[ii].pricePerUnit, potentialWinners[ii].bidder);
+                    } else {
+                        emit BidLostNotification(tokenId, auctionId, potentialWinners[ii].bidId, potentialWinners[ii].bidder);
+                    }
+                    cumAmount += potentialWinners[ii].amount;
                 }
-                cumAmount += potentialWinners[ii].amount;
             }
 
             uint256 totalReceipt = auction.totalHeldBalance;
