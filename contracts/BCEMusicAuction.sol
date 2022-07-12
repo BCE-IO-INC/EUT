@@ -2,6 +2,7 @@
 pragma solidity ^0.8.4;
 
 import "./IBCEMusic.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 //import "hardhat/console.sol";
 
 library BCEMusicAuction {
@@ -348,25 +349,52 @@ library BCEMusicAuction {
             });
         } else {
             IBCEMusic.AuctionWinner[] memory potentialWinners = _buildPotentialWinners(auction);
+            uint256[] memory totalPay = new uint256[](potentialWinners.length);
             uint16 cumAmount = 0;
-            for (uint ii=0; ii<potentialWinners.length; ++ii) {
-                uint256 originalPricePerUnit = potentialWinners[ii].pricePerUnit;
-                uint16 originalAmount = potentialWinners[ii].amount;
+            uint16 totalAmount = auction.terms.amount;
+            uint256 finalPrice = 0;
+            uint256 finalReceipt = 0;
+            uint16 cutOff = 0;
+            for (uint16 ii=0; ii<potentialWinners.length; ++ii) {
+                totalPay[ii] = potentialWinners[ii].pricePerUnit*potentialWinners[ii].amount;
+                uint256 p = 0;
                 if (ii+1 < potentialWinners.length) {
-                    potentialWinners[ii].pricePerUnit = potentialWinners[ii+1].pricePerUnit;
+                    p = potentialWinners[ii+1].pricePerUnit;
                 } else {
-                    potentialWinners[ii].pricePerUnit = auction.terms.reservePricePerUnit;
+                    p = auction.terms.reservePricePerUnit;
                 }
-                if (cumAmount + potentialWinners[ii].amount >= auction.terms.amount) {
-                    potentialWinners[ii].amount = auction.terms.amount-cumAmount;
+                uint256 sz = 0;
+                for (uint16 jj=0; jj<ii; ++jj) {
+                    sz += totalPay[jj]/p;
+                    if (sz >= totalAmount) {
+                        sz = totalAmount;
+                        break;
+                    }
                 }
-                potentialWinners[ii].refund = originalAmount*originalPricePerUnit-potentialWinners[ii].amount*potentialWinners[ii].pricePerUnit;
+                if (finalReceipt < sz*p) {
+                    finalReceipt = sz*p;
+                    finalPrice = p;
+                    cutOff = ii+1;
+                }
+                if (sz == totalAmount) {
+                    break;
+                }
+            }
+            for (uint16 ii=0; ii<cutOff; ++ii) {
+                potentialWinners[ii].pricePerUnit = finalPrice;
+                potentialWinners[ii].amount = uint16(Math.min(totalPay[ii]/finalPrice, uint256(totalAmount-cumAmount)));
+                potentialWinners[ii].refund = totalPay[ii]-potentialWinners[ii].amount*potentialWinners[ii].pricePerUnit;
                 if (potentialWinners[ii].amount > 0) {
                     emit BidWonNotification(tokenId, auctionId, potentialWinners[ii].bidId, potentialWinners[ii].amount, potentialWinners[ii].pricePerUnit, potentialWinners[ii].bidder);
                 } else {
                     emit BidLostNotification(tokenId, auctionId, potentialWinners[ii].bidId, potentialWinners[ii].bidder);
                 }
                 cumAmount += potentialWinners[ii].amount;
+            }
+            for (uint16 ii=cutOff; ii<potentialWinners.length; ++ii) {
+                potentialWinners[ii].amount = 0;
+                potentialWinners[ii].refund = totalPay[ii];
+                emit BidLostNotification(tokenId, auctionId, potentialWinners[ii].bidId, potentialWinners[ii].bidder);
             }
 
             uint256 totalReceipt = auction.totalHeldBalance;
