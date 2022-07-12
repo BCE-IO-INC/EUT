@@ -355,29 +355,30 @@ library BCEMusicAuction {
             uint256 finalPrice = 0;
             uint256 finalReceipt = 0;
             uint16 cutOff = 0;
-            for (uint16 ii=0; ii<potentialWinners.length; ++ii) {
-                totalPay[ii] = potentialWinners[ii].pricePerUnit*potentialWinners[ii].amount;
-                uint256 p = 0;
-                if (ii+1 < potentialWinners.length) {
-                    p = potentialWinners[ii+1].pricePerUnit;
-                } else {
-                    p = auction.terms.reservePricePerUnit;
-                }
-                uint256 sz = 0;
-                for (uint16 jj=0; jj<ii; ++jj) {
-                    sz += totalPay[jj]/p;
-                    if (sz >= totalAmount) {
+            unchecked {
+                for (uint16 ii=0; ii<potentialWinners.length; ++ii) {
+                    totalPay[ii] = potentialWinners[ii].pricePerUnit*potentialWinners[ii].amount;
+                    uint256 p = 0;
+                    if (ii+1 < potentialWinners.length) {
+                        p = potentialWinners[ii+1].pricePerUnit;
+                    } else {
+                        p = auction.terms.reservePricePerUnit;
+                    }
+                    uint256 sz = 0;
+                    for (int16 jj=int16(ii-1); jj>=0 /*&& sz<totalAmount*/; --jj) {
+                        sz += totalPay[uint16(jj)]/p;
+                    }
+                    if (sz > totalAmount) {
                         sz = totalAmount;
+                    }
+                    if (finalReceipt < sz*p) {
+                        finalReceipt = sz*p;
+                        finalPrice = p;
+                        cutOff = ii+1;
+                    }
+                    if (sz == totalAmount) {
                         break;
                     }
-                }
-                if (finalReceipt < sz*p) {
-                    finalReceipt = sz*p;
-                    finalPrice = p;
-                    cutOff = ii+1;
-                }
-                if (sz == totalAmount) {
-                    break;
                 }
             }
             for (uint16 ii=0; ii<cutOff; ++ii) {
