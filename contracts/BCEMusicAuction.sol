@@ -79,31 +79,36 @@ library BCEMusicAuction {
         }
         return 0;
     }
-    function _zig(IBCEMusic.Auction storage auction, uint32 revealedBidId, uint32 parentId, bool left) private {
-        uint32 l = auction.revealedBids[revealedBidId].left;
-        auction.revealedBids[revealedBidId].left = auction.revealedBids[l].right;
-        auction.revealedBids[l].right = revealedBidId;
-        if (parentId == 0) {
-            auction.revealedBidRoot = l;
-        } else {
-            if (left) {
-                auction.revealedBids[parentId].left = l;
+    function _rotateUp(IBCEMusic.Auction storage auction, uint32 hinge) private {
+        IBCEMusic.RevealedBid storage hb = auction.revealedBids[hinge];
+        uint32 p = hb.parent;
+        while (p != 0) {
+            IBCEMusic.RevealedBid storage pb = auction.revealedBids[p];
+            if (pb.blockHash < hb.blockHash) {
+                if (pb.left == hinge) {
+                    pb.left = hb.right;
+                    hb.right = p;
+                } else {
+                    pb.right = hb.left;
+                    hb.left = p;
+                }
+                uint32 nextParent = pb.parent;
+                pb.parent = hinge;
+                hb.parent = nextParent;
+                if (nextParent == 0) {
+                    auction.revealedBidRoot = hinge;
+                    break;
+                } else {
+                    IBCEMusic.RevealedBid storage nextPB = auction.revealedBids[nextParent];
+                    if (nextPB.left == p) {
+                        nextPB.left = hinge;
+                    } else {
+                        nextPB.right = hinge;
+                    }
+                    p = nextParent;
+                }
             } else {
-                auction.revealedBids[parentId].right = l;
-            }
-        }
-    }
-    function _zag(IBCEMusic.Auction storage auction, uint32 revealedBidId, uint32 parentId, bool left) private {
-        uint32 r = auction.revealedBids[revealedBidId].right;
-        auction.revealedBids[revealedBidId].right = auction.revealedBids[r].left;
-        auction.revealedBids[r].left = revealedBidId;
-        if (parentId == 0) {
-            auction.revealedBidRoot = r;
-        } else {
-            if (left) {
-                auction.revealedBids[parentId].left = r;
-            } else {
-                auction.revealedBids[parentId].right = r;
+                break;
             }
         }
     }
@@ -113,34 +118,26 @@ library BCEMusicAuction {
             auction.revealedBidRoot = newId;
             return;
         }
-        uint32 parent = 0;
         uint32 current = auction.revealedBidRoot;
-        bool left = false;
         while (current != 0) {
             int8 c = _compareBids(auction.revealedBids[newId], auction.revealedBids[current]);
             if (c < 0) {
                 if (auction.revealedBids[current].left == 0) {
                     auction.revealedBids[current].left = newId;
-                    if (auction.revealedBids[current].blockHash < auction.revealedBids[newId].blockHash) {
-                        _zig(auction, current, parent, left);
-                    }
+                    auction.revealedBids[newId].parent = current;
+                    _rotateUp(auction, newId);
                     return;
                 } else {
-                    parent = current;
                     current = auction.revealedBids[current].left;
-                    left = true;
                 }
             } else {
                 if (auction.revealedBids[current].right == 0) {
                     auction.revealedBids[current].right = newId;
-                    if (auction.revealedBids[current].blockHash < auction.revealedBids[newId].blockHash) {
-                        _zag(auction, current, parent, left);
-                    }
+                    auction.revealedBids[newId].parent = current;
+                    _rotateUp(auction, newId);
                     return;
                 } else {
-                    parent = current;
                     current = auction.revealedBids[current].right;
-                    left = false;
                 }
             }
         }
@@ -155,7 +152,8 @@ library BCEMusicAuction {
             bidId : bidId
             , left : 0
             , right : 0
-            , blockHash : uint160(uint256(blockhash(block.number-1)))
+            , parent : 0
+            , blockHash : uint128(uint256(blockhash(block.number-1)))
             , pricePerUnit : pricePerUnit 
         });
         auction.revealedAmount += (auction.bids[bidId].amountAndRevealed & 0x7f);
