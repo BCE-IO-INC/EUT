@@ -365,7 +365,7 @@ library BCEMusicAuction {
                         p = auction.terms.reservePricePerUnit;
                     }
                     uint256 sz = 0;
-                    for (int16 jj=int16(ii-1); jj>=0 /*&& sz<totalAmount*/; --jj) {
+                    for (int16 jj=int16(ii); jj>=0 /*&& sz<totalAmount*/; --jj) {
                         sz += totalPay[uint16(jj)]/p;
                     }
                     if (sz > totalAmount) {
