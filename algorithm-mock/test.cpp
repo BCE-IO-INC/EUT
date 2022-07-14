@@ -97,6 +97,83 @@ namespace algorithm_mock {
                 os << "]\n";
             }
 
+            void rotateUpForAdd(std::size_t idx) {
+                auto p = idx;
+                while (p != std::numeric_limits<std::size_t>::max() && nodes[p].weight < nodes[insertIdx].weight) {
+                    if (nodes[p].right == insertIdx) {
+                        auto l = nodes[insertIdx].left;
+                        nodes[insertIdx].left = p;
+                        nodes[p].right = l;
+                        if (l != std::numeric_limits<std::size_t>::max()) {
+                            nodes[l].parent = p;
+                        }
+                        nodes[p].subtreeSize = 
+                                    nodes[p].subtreeSize = 
+                        nodes[p].subtreeSize = 
+                            ((nodes[p].left == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].left].subtreeSize)
+                            +nodes[p].count
+                            +((nodes[p].right == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].right].subtreeSize)
+                            ;
+                        nodes[insertIdx].parent = nodes[p].parent;
+                        nodes[insertIdx].subtreeSize = 
+                                    nodes[insertIdx].subtreeSize = 
+                        nodes[insertIdx].subtreeSize = 
+                            nodes[p].subtreeSize
+                            +nodes[insertIdx].count
+                            +((nodes[insertIdx].right == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[insertIdx].right].subtreeSize)
+                            ;
+                        nodes[p].parent = insertIdx;
+                        auto lastP = p;
+                        p = nodes[insertIdx].parent;
+                        if (p == std::numeric_limits<std::size_t>::max()) {
+                            head = insertIdx;
+                            break;
+                        } else {
+                            if (nodes[p].left == lastP) {
+                                nodes[p].left = insertIdx;
+                            } else {
+                                nodes[p].right = insertIdx;
+                            }
+                        }
+                    } else {
+                        auto r = nodes[insertIdx].right;
+                        nodes[insertIdx].right = p;
+                        nodes[p].left = r;
+                        if (r != std::numeric_limits<std::size_t>::max()) {
+                            nodes[r].parent = p;
+                        }
+                        nodes[p].subtreeSize = 
+                                    nodes[p].subtreeSize = 
+                        nodes[p].subtreeSize = 
+                            ((nodes[p].left == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].left].subtreeSize)
+                            +nodes[p].count
+                            +((nodes[p].right == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].right].subtreeSize)
+                            ;
+                        nodes[insertIdx].parent = nodes[p].parent;
+                        nodes[insertIdx].subtreeSize = 
+                                    nodes[insertIdx].subtreeSize = 
+                        nodes[insertIdx].subtreeSize = 
+                            nodes[p].subtreeSize
+                            +nodes[insertIdx].count
+                            +((nodes[insertIdx].left == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[insertIdx].left].subtreeSize)
+                            ;
+                        nodes[p].parent = insertIdx;
+                        auto lastP = p;
+                        p = nodes[insertIdx].parent;
+                        if (p == std::numeric_limits<std::size_t>::max()) {
+                            head = insertIdx;
+                            break;
+                        } else {
+                            if (nodes[p].left == lastP) {
+                                nodes[p].left = insertIdx;
+                            } else {
+                                nodes[p].right = insertIdx;
+                            }
+                        }
+                    }
+                }
+            }
+
             void add() {
                 nodes[insertIdx] = {
                     .value = (*input)[insertIdx].price*(*input)[insertIdx].minUnits
@@ -133,72 +210,7 @@ namespace algorithm_mock {
                                 ++nodes[p].subtreeSize;
                                 p = nodes[p].parent;
                             }
-                            p = idx;
-                            while (p != std::numeric_limits<std::size_t>::max() && nodes[p].weight < nodes[insertIdx].weight) {
-                                if (nodes[p].right == insertIdx) {
-                                    auto l = nodes[insertIdx].left;
-                                    nodes[insertIdx].left = p;
-                                    nodes[p].right = l;
-                                    if (l != std::numeric_limits<std::size_t>::max()) {
-                                        nodes[l].parent = p;
-                                    }
-                                    nodes[p].subtreeSize = 
-                                        ((nodes[p].left == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].left].subtreeSize)
-                                        +nodes[p].count
-                                        +((nodes[p].right == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].right].subtreeSize)
-                                        ;
-                                    nodes[insertIdx].parent = nodes[p].parent;
-                                    nodes[insertIdx].subtreeSize = 
-                                        nodes[p].subtreeSize
-                                        +nodes[insertIdx].count
-                                        +((nodes[insertIdx].right == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[insertIdx].right].subtreeSize)
-                                        ;
-                                    nodes[p].parent = insertIdx;
-                                    auto lastP = p;
-                                    p = nodes[insertIdx].parent;
-                                    if (p == std::numeric_limits<std::size_t>::max()) {
-                                        head = insertIdx;
-                                        break;
-                                    } else {
-                                        if (nodes[p].left == lastP) {
-                                            nodes[p].left = insertIdx;
-                                        } else {
-                                            nodes[p].right = insertIdx;
-                                        }
-                                    }
-                                } else {
-                                    auto r = nodes[insertIdx].right;
-                                    nodes[insertIdx].right = p;
-                                    nodes[p].left = r;
-                                    if (r != std::numeric_limits<std::size_t>::max()) {
-                                        nodes[r].parent = p;
-                                    }
-                                    nodes[p].subtreeSize = 
-                                        ((nodes[p].left == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].left].subtreeSize)
-                                        +nodes[p].count
-                                        +((nodes[p].right == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].right].subtreeSize)
-                                        ;
-                                    nodes[insertIdx].parent = nodes[p].parent;
-                                    nodes[insertIdx].subtreeSize = 
-                                        nodes[p].subtreeSize
-                                        +nodes[insertIdx].count
-                                        +((nodes[insertIdx].left == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[insertIdx].left].subtreeSize)
-                                        ;
-                                    nodes[p].parent = insertIdx;
-                                    auto lastP = p;
-                                    p = nodes[insertIdx].parent;
-                                    if (p == std::numeric_limits<std::size_t>::max()) {
-                                        head = insertIdx;
-                                        break;
-                                    } else {
-                                        if (nodes[p].left == lastP) {
-                                            nodes[p].left = insertIdx;
-                                        } else {
-                                            nodes[p].right = insertIdx;
-                                        }
-                                    }
-                                }
-                            }
+                            rotateUpForAdd(idx);
                             break;
                         } else {
                             idx = nodes[idx].right;
@@ -213,72 +225,7 @@ namespace algorithm_mock {
                                 ++nodes[p].subtreeSize;
                                 p = nodes[p].parent;
                             }
-                            p = idx;
-                            while (p != std::numeric_limits<std::size_t>::max() && nodes[p].weight < nodes[insertIdx].weight) {
-                                if (nodes[p].right == insertIdx) {
-                                    auto l = nodes[insertIdx].left;
-                                    nodes[insertIdx].left = p;
-                                    nodes[p].right = l;
-                                    if (l != std::numeric_limits<std::size_t>::max()) {
-                                        nodes[l].parent = p;
-                                    }
-                                    nodes[p].subtreeSize = 
-                                        ((nodes[p].left == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].left].subtreeSize)
-                                        +nodes[p].count
-                                        +((nodes[p].right == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].right].subtreeSize)
-                                        ;
-                                    nodes[insertIdx].parent = nodes[p].parent;
-                                    nodes[insertIdx].subtreeSize = 
-                                        nodes[p].subtreeSize
-                                        +nodes[insertIdx].count
-                                        +((nodes[insertIdx].right == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[insertIdx].right].subtreeSize)
-                                        ;
-                                    nodes[p].parent = insertIdx;
-                                    auto lastP = p;
-                                    p = nodes[insertIdx].parent;
-                                    if (p == std::numeric_limits<std::size_t>::max()) {
-                                        head = insertIdx;
-                                        break;
-                                    } else {
-                                        if (nodes[p].left == lastP) {
-                                            nodes[p].left = insertIdx;
-                                        } else {
-                                            nodes[p].right = insertIdx;
-                                        }
-                                    }
-                                } else {
-                                    auto r = nodes[insertIdx].right;
-                                    nodes[insertIdx].right = p;
-                                    nodes[p].left = r;
-                                    if (r != std::numeric_limits<std::size_t>::max()) {
-                                        nodes[r].parent = p;
-                                    }
-                                    nodes[p].subtreeSize = 
-                                        ((nodes[p].left == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].left].subtreeSize)
-                                        +nodes[p].count
-                                        +((nodes[p].right == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].right].subtreeSize)
-                                        ;
-                                    nodes[insertIdx].parent = nodes[p].parent;
-                                    nodes[insertIdx].subtreeSize = 
-                                        nodes[p].subtreeSize
-                                        +nodes[insertIdx].count
-                                        +((nodes[insertIdx].left == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[insertIdx].left].subtreeSize)
-                                        ;
-                                    nodes[p].parent = insertIdx;
-                                    auto lastP = p;
-                                    p = nodes[insertIdx].parent;
-                                    if (p == std::numeric_limits<std::size_t>::max()) {
-                                        head = insertIdx;
-                                        break;
-                                    } else {
-                                        if (nodes[p].left == lastP) {
-                                            nodes[p].left = insertIdx;
-                                        } else {
-                                            nodes[p].right = insertIdx;
-                                        }
-                                    }
-                                }
-                            }
+                            rotateUpForAdd(idx);
                             break;
                         } else {
                             idx = nodes[idx].left;
