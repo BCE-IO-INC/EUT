@@ -111,7 +111,7 @@ describe("Auction test", () => {
         var finalizeEvent = finalizeRes.events.find(event => event.event === 'AuctionFinalized');
         console.log(`\t\tAuction ${finalizeEvent.args.auctionId} finalized, gas used=${finalizeRes.gasUsed.toNumber()}`);
     });
-    
+    /*
     it("Music auction (pressure test)", async () => {
         const signers = await ethers.getSigners();
         const owner = signers[0];
@@ -185,7 +185,7 @@ describe("Auction test", () => {
         var finalizeEvent = finalizeRes.events.find(event => event.event === 'AuctionFinalized');
         console.log(`\t\tAuction ${finalizeEvent.args.auctionId} finalized, gas used=${finalizeRes.gasUsed.toNumber()}`);
     });
-    /*
+    */
     it("Music auction (medium pressure test)", async () => {
         const signers = await ethers.getSigners();
         const owner = signers[0];
@@ -259,5 +259,4 @@ describe("Auction test", () => {
         var finalizeEvent = finalizeRes.events.find(event => event.event === 'AuctionFinalized');
         console.log(`\t\tAuction ${finalizeEvent.args.auctionId} finalized, gas used=${finalizeRes.gasUsed.toNumber()}`);
     });
-    */
 });
