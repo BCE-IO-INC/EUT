@@ -370,6 +370,9 @@ int main() {
             , .minUnits = (uint16_t) 1
         });
     } 
+    std::sort(input.begin(), input.end(), [](auto const &a, auto const &b) {
+            return b.price < a.price;
+    });
     test<algorithm_mock::PlainPricingAlgorithm>(input, 100, 500);
     test<algorithm_mock::BSTPricingAlgorithm>(input, 100, 500);
     return 0;
