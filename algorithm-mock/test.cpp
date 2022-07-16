@@ -31,11 +31,13 @@ namespace algorithm_mock {
             auto ll = input.size();
             uint64_t max = 0;
             uint32_t retVal = 0;
+	    std::vector<uint64_t> totalP(ll);
             for (std::size_t ii=0; ii<ll; ++ii) {
+                totalP[ii] = (uint64_t) input[ii].price*input[ii].minUnits;
                 uint32_t p = (ii<ll-1)?input[ii+1].price:reservePrice;
                 uint16_t sz = 0;
                 for (std::size_t jj=0; jj<=ii; ++jj) {
-                    sz += (uint32_t) (((uint64_t) input[jj].price*input[jj].minUnits)/p);
+                    sz += (uint32_t) (totalP[jj]/p);
                     if (sz >= totalUnits) {
                         sz = totalUnits;
                         break;
