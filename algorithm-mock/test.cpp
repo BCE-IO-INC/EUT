@@ -69,6 +69,8 @@ namespace algorithm_mock {
                 std::size_t parent = std::numeric_limits<std::size_t>::max();
                 std::size_t left = std::numeric_limits<std::size_t>::max();
                 std::size_t right = std::numeric_limits<std::size_t>::max();
+                std::size_t prev = std::numeric_limits<std::size_t>::max();
+                std::size_t next = std::numeric_limits<std::size_t>::max();
             };
             std::vector<Node> nodes;
             InputData const *input;
@@ -95,6 +97,8 @@ namespace algorithm_mock {
                         << ",Parent=" << nodes[ii].parent 
                         << ",Left=" << nodes[ii].left 
                         << ",Right=" << nodes[ii].right 
+                        << ",Prev=" << nodes[ii].prev 
+                        << ",Next=" << nodes[ii].next
                         << "}  ";
                 }
                 os << "]\n";
@@ -208,6 +212,13 @@ namespace algorithm_mock {
                             nodes[idx].right = insertIdx;
                             nodes[insertIdx].parent = idx;
                             ++nodes[idx].subtreeSize;
+                            nodes[insertIdx].prev = idx;
+                            auto prevN = nodes[idx].next;
+                            nodes[insertIdx].next = prevN;
+                            nodes[idx].next = insertIdx;
+                            if (prevN != std::numeric_limits<std::size_t>::max()) {
+                                nodes[prevN].prev = insertIdx;
+                            }
                             auto p = nodes[idx].parent;
                             while (p != std::numeric_limits<std::size_t>::max()) {
                                 ++nodes[p].subtreeSize;
@@ -223,6 +234,13 @@ namespace algorithm_mock {
                             nodes[idx].left = insertIdx;
                             nodes[insertIdx].parent = idx;
                             ++nodes[idx].subtreeSize;
+                            nodes[insertIdx].next = idx;
+                            auto prevP = nodes[idx].prev;
+                            nodes[insertIdx].prev = prevP;
+                            nodes[idx].prev = insertIdx;
+                            if (prevP != std::numeric_limits<std::size_t>::max()) {
+                                nodes[prevP].next = insertIdx;
+                            }
                             auto p = nodes[idx].parent;
                             while (p != std::numeric_limits<std::size_t>::max()) {
                                 ++nodes[p].subtreeSize;
@@ -267,36 +285,6 @@ namespace algorithm_mock {
                 }
                 return {candidate, sz};
             }
-            std::size_t prev(std::size_t idx) {
-                if (nodes[idx].left != std::numeric_limits<std::size_t>::max()) {
-                    auto current = nodes[idx].left;
-                    while (true) {
-                        if (nodes[current].right == std::numeric_limits<std::size_t>::max()) {
-                            return current;
-                        }
-                        current = nodes[current].right;
-                    }
-                } else {
-                    if (nodes[idx].parent == std::numeric_limits<std::size_t>::max()) {
-                        return nodes[idx].parent;
-                    } else {
-                        if (nodes[nodes[idx].parent].right == idx) {
-                            return nodes[idx].parent;
-                        } else {
-                            auto current = nodes[idx].parent;
-                            while (nodes[current].parent != std::numeric_limits<std::size_t>::max()) {
-                                auto p = nodes[current].parent;
-                                if (nodes[p].right == current) {
-                                    return p;
-                                } else {
-                                    current = p;
-                                }
-                            }
-                            return std::numeric_limits<std::size_t>::max();
-                        }
-                    }
-                }
-            }
             uint16_t totalSize(uint32_t p, uint32_t totalUnits) {
                 auto sz = maxVal/p;
                 if (sz >= totalUnits) {
@@ -311,7 +299,9 @@ namespace algorithm_mock {
                         return totalUnits;
                     }
                     rightCount = leftCount;
-                    left = prev(left);
+                    if (left != std::numeric_limits<std::size_t>::max()) {
+                        left = nodes[left].prev;
+                    }
                     if (left == std::numeric_limits<std::size_t>::max()) {
                         return cumSz;
                     } else {
@@ -358,7 +348,7 @@ int main() {
     for (int ii=0; ii<=500; ++ii) {
         input.push_back(algorithm_mock::InputDataItem {
             .price = (uint32_t) (600-ii)
-            , .minUnits = (uint16_t) ((ii%2)+1)
+            , .minUnits = (uint16_t) 1
         });
     } 
     std::sort(input.begin(), input.end(), [](auto const &a, auto const &b) {
