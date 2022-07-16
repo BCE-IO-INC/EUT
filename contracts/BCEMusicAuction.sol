@@ -268,27 +268,29 @@ library BCEMusicAuction {
         uint32 stackSize = 0;
         uint32 ii = 0;
         uint32 current = auction.revealedBidRoot;
-        while (stackSize > 0 || current != 0) {
-            while (current != 0) {
-                stack[stackSize] = current;
-                ++stackSize;
-                current = auction.revealedBids[current].right;
-            }
-            if (stackSize > 0) {
-                current = stack[stackSize-1];
-                uint32 bidId = auction.revealedBids[current].bidId;
-                potentialWinners[ii] = IBCEMusic.AuctionWinner({
-                    amount: (auction.bids[bidId].amountAndRevealed & 0x7f)
-                    , bidId : bidId
-                    , bidder : auction.bids[bidId].bidder
-                    , pricePerUnit: auction.revealedBids[current].pricePerUnit
-                    , refund: 0
-                });
-                ++ii;
-                current = auction.revealedBids[current].left;
-                delete(auction.revealedBids[stack[stackSize-1]]);
-                stack[stackSize-1] = 0;
-                --stackSize;
+        unchecked {
+            while (stackSize > 0 || current != 0) {
+                while (current != 0) {
+                    stack[stackSize] = current;
+                    ++stackSize;
+                    current = auction.revealedBids[current].right;
+                }
+                if (stackSize > 0) {
+                    current = stack[stackSize-1];
+                    uint32 bidId = auction.revealedBids[current].bidId;
+                    potentialWinners[ii] = IBCEMusic.AuctionWinner({
+                        amount: (auction.bids[bidId].amountAndRevealed & 0x7f)
+                        , bidId : bidId
+                        , bidder : auction.bids[bidId].bidder
+                        , pricePerUnit: auction.revealedBids[current].pricePerUnit
+                        , refund: 0
+                    });
+                    ++ii;
+                    current = auction.revealedBids[current].left;
+                    delete(auction.revealedBids[stack[stackSize-1]]);
+                    stack[stackSize-1] = 0;
+                    --stackSize;
+                }
             }
         }
         return potentialWinners;
