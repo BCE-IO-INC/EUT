@@ -3,6 +3,7 @@
 #include <limits>
 #include <random>
 #include <chrono>
+#include <tuple>
 #include <stdint.h>
 
 namespace algorithm_mock {
@@ -236,46 +237,35 @@ namespace algorithm_mock {
                 }
                 ++insertIdx;
             }
-            std::size_t sizeUpToAndIncluding(std::size_t idx) {
-                std::size_t ret = nodes[idx].count;
-                if (nodes[idx].left != std::numeric_limits<std::size_t>::max()) {
-                    ret += nodes[nodes[idx].left].subtreeSize;
-                }
-                std::size_t current = idx;
-                std::size_t parent = nodes[idx].parent;
-                while (parent != std::numeric_limits<std::size_t>::max()) {
-                    if (nodes[parent].right == current) {
-                        ret += nodes[parent].count;
-                        if (nodes[parent].left != std::numeric_limits<std::size_t>::max()) {
-                            ret += nodes[nodes[parent].left].subtreeSize;
-                        }
-                    }
-                    current = parent;
-                    parent = nodes[parent].parent;
-                }
-                return ret;
-            }
-            std::size_t findSmallestIdxGE(uint64_t val) {
+            std::tuple<std::size_t, std::size_t> findSmallestIdxGEAndSizeBelow(uint64_t val) {
                 auto idx = head;
                 auto candidate = std::numeric_limits<std::size_t>::max();
+                auto sz = 0;
                 while (true) {
                     if (nodes[idx].value == val) {
-                        return idx;
+                        if (nodes[idx].left != std::numeric_limits<std::size_t>::max()) {
+                            sz += nodes[nodes[idx].left].subtreeSize;
+                        }
+                        return {idx, sz};
                     }
                     if (nodes[idx].value < val) {
+                        sz += nodes[idx].count;
+                        if (nodes[idx].left != std::numeric_limits<std::size_t>::max()) {
+                            sz += nodes[nodes[idx].left].subtreeSize;
+                        }
                         idx = nodes[idx].right;
                         if (idx == std::numeric_limits<std::size_t>::max()) {
-                            return candidate;
+                            return {candidate, sz};
                         }
                     } else {
                         if (nodes[idx].left == std::numeric_limits<std::size_t>::max()) {
-                            return idx;
+                            return {idx, sz};
                         }
                         candidate = idx;
                         idx = nodes[idx].left;
                     }
                 }
-                return candidate;
+                return {candidate, sz};
             }
             std::size_t prev(std::size_t idx) {
                 if (nodes[idx].left != std::numeric_limits<std::size_t>::max()) {
@@ -315,8 +305,7 @@ namespace algorithm_mock {
                 auto cumSz = 0;
                 auto rightCount = insertIdx;
                 while (true) {
-                    auto left = findSmallestIdxGE(sz*p);
-                    auto leftCount = sizeUpToAndIncluding(left)-nodes[left].count;
+                    auto [left, leftCount] = findSmallestIdxGEAndSizeBelow(sz*p);
                     cumSz += sz*(rightCount-leftCount);
                     if (cumSz >= totalUnits) {
                         return totalUnits;
@@ -369,7 +358,7 @@ int main() {
     for (int ii=0; ii<=500; ++ii) {
         input.push_back(algorithm_mock::InputDataItem {
             .price = (uint32_t) (600-ii)
-            , .minUnits = (uint16_t) 1
+            , .minUnits = (uint16_t) ((ii%2)+1)
         });
     } 
     std::sort(input.begin(), input.end(), [](auto const &a, auto const &b) {
