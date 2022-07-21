@@ -13,6 +13,8 @@ namespace algorithm_mock {
     };
     using InputData = std::vector<InputDataItem>;
 
+    //There is an assumption that input is sorted (descending) on price,
+    //the main function down below enforces that.
     template <typename T>
     concept PricingAlgorithm = requires(InputData const &input, uint32_t reservePrice, uint16_t totalUnits)
     {
@@ -78,6 +80,9 @@ namespace algorithm_mock {
             std::size_t head;
             uint64_t maxVal = 0;
 
+            //In on-chain implementations, the randomness will be supplied 
+            //from block hashes associated with each input (bid). Here, for
+            //mock purposes, randomness is supplied from C++ standard library.
             std::random_device rd;
             std::mt19937 gen;
             std::uniform_int_distribution<int> dist;
