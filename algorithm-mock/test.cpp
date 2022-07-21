@@ -115,15 +115,11 @@ namespace algorithm_mock {
                             nodes[l].parent = p;
                         }
                         nodes[p].subtreeSize = 
-                                    nodes[p].subtreeSize = 
-                        nodes[p].subtreeSize = 
                             ((nodes[p].left == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].left].subtreeSize)
                             +nodes[p].count
                             +((nodes[p].right == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].right].subtreeSize)
                             ;
                         nodes[insertIdx].parent = nodes[p].parent;
-                        nodes[insertIdx].subtreeSize = 
-                                    nodes[insertIdx].subtreeSize = 
                         nodes[insertIdx].subtreeSize = 
                             nodes[p].subtreeSize
                             +nodes[insertIdx].count
@@ -150,15 +146,11 @@ namespace algorithm_mock {
                             nodes[r].parent = p;
                         }
                         nodes[p].subtreeSize = 
-                                    nodes[p].subtreeSize = 
-                        nodes[p].subtreeSize = 
                             ((nodes[p].left == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].left].subtreeSize)
                             +nodes[p].count
                             +((nodes[p].right == std::numeric_limits<std::size_t>::max())?0:nodes[nodes[p].right].subtreeSize)
                             ;
-                        nodes[insertIdx].parent = nodes[p].parent;
-                        nodes[insertIdx].subtreeSize = 
-                                    nodes[insertIdx].subtreeSize = 
+                        nodes[insertIdx].parent = nodes[p].parent; 
                         nodes[insertIdx].subtreeSize = 
                             nodes[p].subtreeSize
                             +nodes[insertIdx].count
