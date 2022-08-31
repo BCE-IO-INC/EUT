@@ -1,5 +1,7 @@
 package com.eut.auction.mock;
 
+import java.math.BigDecimal;
+
 //这个类的总体写法是为将来上链考虑的，所以基本没有使用
 //Java的各种数据结构，也不使用递归
 
@@ -7,10 +9,10 @@ public class Auction {
 
     public static class OneAuctionInput {
         //Java没有unsigned类型，只能都用signed来代替
-        int price; //最高愿意出的每单元价格。这个在solidity里大约会是uint256，这里用int而不是long是为了保证乘以数量后的总价可以放在long里面
+        BigDecimal price; //最高愿意出的每单元价格。这个在solidity里大约会是uint256，这里改成BigDecimal
         short requestUnits; //要求买的单元数。由于我们最多卖500单元，所以short肯定是够的，到solidity里面就是uint16
 
-        OneAuctionInput(int p, short u) {
+        OneAuctionInput(BigDecimal p, short u) {
             this.price = p;
             this.requestUnits = u;
         }
@@ -18,32 +20,32 @@ public class Auction {
 
     //朴素定价算法
     //输出的结果是最后的每单元拍卖价
-    public static int plainPricing(
+    public static BigDecimal plainPricing(
         OneAuctionInput[] input //所有还没有被退回的买单
                                 //上链的话，应该会在每新有一个买单揭晓的时候退掉已经不可能买到（即排在前面的单，即使去掉最后一个，总要求单元数也已经超过了总量）的单，这样的话，可以确保这里的输入数组长度不超过总量
                                 //输入的时候这个数组必须按单元价格从高到低排序（同样价格按下单顺序排）。实测这个排序的要求即使在链上也是可以做到的。这里没有加assert，但如果不满足的话，结果会是错误的。
-        , int reservePrice      //每单元保留价格，数组里的每一个的单元价格都必须不小于这个价格（也没有加assert）
+        , BigDecimal reservePrice      //每单元保留价格，数组里的每一个的单元价格都必须不小于这个价格（也没有加assert）
         , short totalUnits      //总量
     ) {
         var ll = input.length;
-        long max = 0;
-        int retVal = 0;
-	    long[] totalP = new long[ll];
+        BigDecimal max = BigDecimal.ZERO;
+        BigDecimal retVal = BigDecimal.ZERO;
+	    BigDecimal[] totalP = new BigDecimal[ll];
         for (var ii=0; ii<ll; ++ii) {
-            totalP[ii] = (long) input[ii].price*input[ii].requestUnits;
+            totalP[ii] = input[ii].price.multiply(BigDecimal.valueOf(input[ii].requestUnits));
             var p = (ii<ll-1)?input[ii+1].price:reservePrice;
             long sz = 0;
             //输入排序的重要性在这里
             //这样保证了每次只有排序靠前的单才会被考虑使用这个价格匹配
             for (var jj=0; jj<=ii; ++jj) {
-                sz += totalP[jj]/p;
+                sz += totalP[jj].divideToIntegralValue(p).longValue();
                 if (sz >= totalUnits) {
                     sz = totalUnits;
                     break;
                 }
             }
-            long revenue = sz*p;
-            if (revenue > max) {
+            var revenue = BigDecimal.valueOf(sz).multiply(p);
+            if (revenue.compareTo(max) > 0) {
                 max = revenue;
                 retVal = p;
             }
@@ -55,9 +57,9 @@ public class Auction {
     }
 
     //复杂定价算法，输入输出与朴素算法相同
-    public static int bstPricing(
+    public static BigDecimal bstPricing(
         OneAuctionInput[] input 
-        , int reservePrice
+        , BigDecimal reservePrice
         , short totalUnits
     ) {
         //这是一个二叉树节点结构，value代表一个买单的总金额（单元价格*要求单元数），
@@ -67,7 +69,7 @@ public class Auction {
         //在Java实现中，随机数是在创建树节点时产生的，如果要上链，随机数应该是输入
         //的一部分（每个买单对应的block hash即可）。
         class Node {
-            long value = 0;
+            BigDecimal value = BigDecimal.ZERO;
             int weight = 0;
             short count = 0;
             short subtreeSize = 0;
@@ -93,14 +95,14 @@ public class Auction {
             OneAuctionInput[] input;
             int insertIdx;
             int head;
-            long maxVal;
+            BigDecimal maxVal;
 
             Treap(OneAuctionInput[] input) {
                 this.nodes = new Node[input.length];
                 this.input = input;
                 this.insertIdx = 0;
                 this.head = 0;
-                this.maxVal = 0;
+                this.maxVal = BigDecimal.ZERO;
             }
 
             void rotateUpForAdd(int idx) {
@@ -177,12 +179,12 @@ public class Auction {
             }
             void add() {
                 var n = new Node();
-                n.value = input[insertIdx].price*input[insertIdx].requestUnits;
+                n.value = input[insertIdx].price.multiply(BigDecimal.valueOf(input[insertIdx].requestUnits));
                 n.weight = java.util.concurrent.ThreadLocalRandom.current().nextInt(0, 1000000);
                 n.count = 1;
                 n.subtreeSize = 1;
                 nodes[insertIdx] = n;
-                if (nodes[insertIdx].value > maxVal) {
+                if (nodes[insertIdx].value.compareTo(maxVal) > 0) {
                     maxVal = nodes[insertIdx].value;
                 }
                 if (insertIdx == 0) {
@@ -192,7 +194,7 @@ public class Auction {
                 
                 var idx = head;
                 while (true) {
-                    if (nodes[idx].value == nodes[insertIdx].value) {
+                    if (nodes[idx].value.compareTo(nodes[insertIdx].value) == 0) {
                         ++nodes[idx].count;
                         ++nodes[idx].subtreeSize;
                         var p = nodes[idx].parent;
@@ -201,7 +203,7 @@ public class Auction {
                             p = nodes[p].parent;
                         }
                         break;
-                    } else if (nodes[idx].value < nodes[insertIdx].value) {
+                    } else if (nodes[idx].value.compareTo(nodes[insertIdx].value) < 0) {
                         if (nodes[idx].right == Integer.MAX_VALUE) {
                             nodes[idx].right = insertIdx;
                             nodes[insertIdx].parent = idx;
@@ -249,18 +251,18 @@ public class Auction {
                 }
                 ++insertIdx;
             }
-            IdxAndSizeBelow findSmallestIdxGEAndSizeBelow(long val) {
+            IdxAndSizeBelow findSmallestIdxGEAndSizeBelow(BigDecimal val) {
                 var idx = head;
                 var candidate = Integer.MAX_VALUE;
                 var sz = 0;
                 while (true) {
-                    if (nodes[idx].value == val) {
+                    if (nodes[idx].value.compareTo(val) == 0) {
                         if (nodes[idx].left != Integer.MAX_VALUE) {
                             sz += nodes[nodes[idx].left].subtreeSize;
                         }
                         return new IdxAndSizeBelow(idx, (short) sz);
                     }
-                    if (nodes[idx].value < val) {
+                    if (nodes[idx].value.compareTo(val) < 0) {
                         sz += nodes[idx].count;
                         if (nodes[idx].left != Integer.MAX_VALUE) {
                             sz += nodes[nodes[idx].left].subtreeSize;
@@ -278,15 +280,15 @@ public class Auction {
                     }
                 }
             }
-            short totalSize(int p, short totalUnits) {
-                long sz = maxVal/p;
+            short totalSize(BigDecimal p, short totalUnits) {
+                long sz = maxVal.divideToIntegralValue(p).longValue();
                 if (sz >= totalUnits) {
                     return totalUnits;
                 }
                 int cumSz = 0;
                 var rightCount = insertIdx;
                 while (true) {
-                    var idxAndSizeBelow = findSmallestIdxGEAndSizeBelow(sz*p);
+                    var idxAndSizeBelow = findSmallestIdxGEAndSizeBelow(BigDecimal.valueOf(sz).multiply(p));
                     var left = idxAndSizeBelow.idx;
                     var leftCount = idxAndSizeBelow.sizeBelow;
                     cumSz += sz*(rightCount-leftCount);
@@ -300,7 +302,7 @@ public class Auction {
                     if (left == Integer.MAX_VALUE) {
                         return (short) cumSz;
                     } else {
-                        sz = nodes[left].value/p;
+                        sz = nodes[left].value.divideToIntegralValue(p).longValue();
                     }
                 }
             }
@@ -308,14 +310,15 @@ public class Auction {
 
         Treap tr = new Treap(input);
         var ll = input.length;
-        long max = 0;
-        int retVal = 0;
+        BigDecimal max = BigDecimal.ZERO;
+        BigDecimal retVal = BigDecimal.ZERO;
         for (var ii=0; ii<ll; ++ii) {
             tr.add();
             var p = (ii==ll-1)?reservePrice:input[ii+1].price;
             var sz = tr.totalSize(p, totalUnits);
-            if (p*sz > max) {
-                max = p*sz;
+            var revenue = p.multiply(BigDecimal.valueOf(sz));
+            if (revenue.compareTo(max) > 0) {
+                max = revenue;
                 retVal = p;
             }
             if (sz == totalUnits) {
@@ -329,14 +332,14 @@ public class Auction {
     //算法很简单：从单价高的往下分配，分完为止
     public static short[] assignUnits(
         OneAuctionInput[] input 
-        , int auctionPrice //这是定价算法算出的结果
+        , BigDecimal auctionPrice //这是定价算法算出的结果
         , short totalUnits
     ) {
         short[] retVal = new short[input.length];
         short remaining = totalUnits;
         int idx = 0;
         while (remaining > 0) {
-            long sz = ((long) input[idx].price*input[idx].requestUnits)/auctionPrice;
+            long sz = (input[idx].price.multiply(BigDecimal.valueOf(input[idx].requestUnits))).divideToIntegralValue(auctionPrice).longValue();
             if (sz >= remaining) {
                 retVal[idx] = remaining;
                 remaining = 0;
@@ -353,20 +356,18 @@ public class Auction {
         return retVal;
     }
 
-    //Java实现的结果是在500的尺度下复杂算法不如朴素算法，到2000的尺度下复杂算法开始略占优势。
-    //在C++实现中，500尺度下复杂算法已经比朴素算法占优。
-    //具体是否是Java实现的问题，可以继续探讨
+    //改为BigDecimal之后，Java实现的结果是500尺度下复杂算法已经比朴素算法占优。
     public static void main(String[] args) {
         OneAuctionInput[] input = new OneAuctionInput[501];
         for (var ii=0; ii<=500; ++ii) {
-            input[ii] = new OneAuctionInput(600-ii, (short) 1);
+            input[ii] = new OneAuctionInput(BigDecimal.valueOf(600-ii), (short) 1);
         }
         long s = System.nanoTime();
-        var v = plainPricing(input, 100, (short) 500);
+        var v = plainPricing(input, BigDecimal.valueOf(100), (short) 500);
         long e = System.nanoTime();
         System.out.println("plain: "+v+" "+(e-s));
         s = System.nanoTime();
-        v = bstPricing(input, 100, (short) 500);
+        v = bstPricing(input, BigDecimal.valueOf(100), (short) 500);
         e = System.nanoTime();
         System.out.println("bst: "+v+" "+(e-s));
     }
